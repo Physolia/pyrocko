@@ -1150,7 +1150,8 @@ def main(*args, **kwargs):
         except ImportError:
             logger.info(
                 'Module qdarkgraystyle not available.\n'
-                'If wanted, install qdarkstyle with "pip install qdarkgraystyle".')
+                'If wanted, install qdarkstyle with "pip install '
+                'qdarkgraystyle".')
 
     win = Viewer(*args, **kwargs)
     app.set_main_window(win)

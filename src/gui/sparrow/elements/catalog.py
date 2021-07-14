@@ -356,8 +356,7 @@ class CatalogState(TableState):
         return 'Catalog'
 
     def create(self):
-        element = CatalogElement()
-        return element
+        return CatalogElement()
 
 
 class CatalogElement(TableElement):
@@ -365,59 +364,21 @@ class CatalogElement(TableElement):
     def __init__(self, *args, **kwargs):
         TableElement.__init__(self, *args, **kwargs)
         self._selection_view = None
-        # self._himesh = HiMesh(order=6)
-
-        # cpt_data = [
-        #     (0.0, 0.0, 0.0, 0.0),
-        #     (1.0, 0.9, 0.9, 0.2)]
-        #
-        # self.cpt_mesh = automap.CPT(
-        #     levels=[
-        #         automap.CPTLevel(
-        #             vmin=a[0],
-        #             vmax=b[0],
-        #             color_min=[255*x for x in a[1:]],
-        #             color_max=[255*x for x in b[1:]])
-        #         for (a, b) in zip(cpt_data[:-1], cpt_data[1:])])
 
     def get_name(self):
         return 'Catalog'
 
-    def bind_state(self, state):
-        TableElement.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'selection')
+    def get_state_listeners(self):
+        return TableElement.get_state_listeners(self) \
+            + [(self.update, ['selection'])]
 
     def update(self, *args):
         state = self._state
-        # ifaces = None
         if self._selection_view is not state.selection:
             self.set_table(state.selection.get_table())
             self._selection_view = state.selection
 
-            # ifaces = self._himesh.points_to_faces(self._table.get_col('xyz'))
-
         TableElement.update(self, *args)
-
-        # if ifaces is not None:
-        #     ifaces_x, sizes = binned_statistic(
-        #         ifaces, ifaces, lambda part: part.shape[0])
-        #
-        #     vertices = self._himesh.get_vertices()
-        #     # vertices *= 0.95
-        #     faces = self._himesh.get_faces()
-        #
-        #     values = num.zeros(faces.shape[0])
-        #     values[ifaces_x] = num.log(1+sizes)
-        #
-        #     self._mesh = TrimeshPipe(vertices, faces, values=values)
-        #     cpt = copy.deepcopy(self.cpt_mesh)
-        #     cpt.scale(num.min(values), num.max(values))
-        #     self._mesh.set_cpt(cpt)
-        #     self._mesh.set_opacity(0.5)
-
-        #     self._parent.add_actor(self._mesh.actor)
 
     def open_file_dialog(self):
         caption = 'Select one or more files to open'
@@ -465,27 +426,26 @@ class CatalogElement(TableElement):
     def _get_table_widgets_start(self):
         return 1  # used as y arg in addWidget calls
 
-    def _get_controls(self):
-        if not self._controls:
-            frame = TableElement._get_controls(self)  # sets self._controls
-            layout = frame.layout()
+    def get_panel(self):
+        frame = TableElement.get_panel(self)
+        layout = frame.layout()
 
-            lab = qw.QLabel('Load from:')
-            pb_file = qw.QPushButton('File')
+        lab = qw.QLabel('Load from:')
+        pb_file = qw.QPushButton('File')
 
-            layout.addWidget(lab, 0, 0)
-            layout.addWidget(pb_file, 0, 1)
+        layout.addWidget(lab, 0, 0)
+        layout.addWidget(pb_file, 0, 1)
 
-            pb_file.clicked.connect(self.open_file_dialog)
+        pb_file.clicked.connect(self.open_file_dialog)
 
-            pb_file = qw.QPushButton('Online Catalog')
+        pb_file = qw.QPushButton('Online Catalog')
 
-            layout.addWidget(lab, 0, 0)
-            layout.addWidget(pb_file, 0, 2)
+        layout.addWidget(lab, 0, 0)
+        layout.addWidget(pb_file, 0, 2)
 
-            pb_file.clicked.connect(self.open_catalog_load_dialog)
+        pb_file.clicked.connect(self.open_catalog_load_dialog)
 
-        return self._controls
+        return frame
 
 
 __all__ = [

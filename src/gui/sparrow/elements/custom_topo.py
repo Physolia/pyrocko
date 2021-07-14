@@ -25,17 +25,13 @@ class CustomTopoState(TopoState):
     path = String.T(optional=True)
 
     def create(self):
-        element = CustomTopoElement()
-        return element
+        return CustomTopoElement()
 
 
 class CustomTopoElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._parent = None
-        self._controls = None
-        self._visible = False
         self._mesh = None
         self._lookuptables = {}
         self._path_loaded = None
@@ -43,38 +39,10 @@ class CustomTopoElement(Element):
     def get_name(self):
         return 'Custom Topography'
 
-    def bind_state(self, state):
-        print('ZZZ', 'binding', id(state))
-        Element.bind_state(self, state)
-        self.register_state_listener3(self.update, state, 'visible')
-        self.register_state_listener3(self.update, state, 'exaggeration')
-        self.register_state_listener3(self.update, state, 'opacity')
-        self.register_state_listener3(self.update, state, 'smooth')
-        self.register_state_listener3(self.update, state, 'cpt')
-        self.register_state_listener3(self.update, state, 'path')
-
-    def set_parent(self, parent):
-        self._parent = parent
-
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._mesh is not None:
-                self._parent.remove_actor(self._mesh.actor)
-
-            self._mesh = None
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
+    def get_state_listeners(self):
+        return [(
+            self.update, ['visible', 'exaggeration', 'opacity', 'smooth',
+                'cpt', 'path'])]
 
     def update_cpt(self, cpt_name):
         if cpt_name not in self._lookuptables:
@@ -96,12 +64,7 @@ class CustomTopoElement(Element):
             self._lookuptables[cpt_name] = lut_combi
 
     def update(self, *args):
-
-
         visible = self._state.visible
-
-        print('xxx', self._state.opacity)
-
         self.update_cpt(self._state.cpt)
 
         if visible:
@@ -109,7 +72,7 @@ class CustomTopoElement(Element):
                     self._state.path != self._path_loaded:
 
                 if self._mesh:
-                    self._parent.remove_actor(self._mesh.actor)
+                    self.remove_actor(self._mesh.actor)
                     self._mesh = None
 
                 t = tile.Tile.from_grd(self._state.path)
@@ -120,14 +83,14 @@ class CustomTopoElement(Element):
                     smooth=self._state.smooth,
                     lut=self._lookuptables[self._state.cpt])
 
-                self._parent.add_actor(self._mesh.actor)
+                self.add_actor(self._mesh.actor)
 
         if not visible and self._mesh:
-            self._parent.remove_actor(self._mesh.actor)
+            self.remove_actor(self._mesh.actor)
 
         if self._mesh:
             if visible:
-                self._parent.add_actor(self._mesh.actor)
+                self.add_actor(self._mesh.actor)
 
             self._mesh.set_exaggeration(self._state.exaggeration)
             self._mesh.set_opacity(self._state.opacity)
@@ -146,74 +109,72 @@ class CustomTopoElement(Element):
         if fn:
             self._state.path = str(fn)
 
-    def _get_controls(self):
+    def get_panel(self):
         state = self._state
-        if not self._controls:
-            from ..state import state_bind_slider, state_bind_checkbox, \
-                state_bind_combobox
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        from ..state import state_bind_slider, state_bind_checkbox, \
+            state_bind_combobox
 
-            lab = qw.QLabel('Load from:')
-            pb_file = qw.QPushButton('File')
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            layout.addWidget(lab, 0, 0)
-            layout.addWidget(pb_file, 0, 1)
+        lab = qw.QLabel('Load from:')
+        pb_file = qw.QPushButton('File')
 
-            pb_file.clicked.connect(self.open_file_dialog)
+        layout.addWidget(lab, 0, 0)
+        layout.addWidget(pb_file, 0, 1)
 
-            # exaggeration
+        pb_file.clicked.connect(self.open_file_dialog)
 
-            layout.addWidget(qw.QLabel('Exaggeration'), 1, 0)
+        # exaggeration
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(2000)
-            layout.addWidget(slider, 1, 1)
+        layout.addWidget(qw.QLabel('Exaggeration'), 1, 0)
 
-            state_bind_slider(self, state, 'exaggeration', slider, factor=0.01)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(2000)
+        layout.addWidget(slider, 1, 1)
 
-            # opacity
+        state_bind_slider(self, state, 'exaggeration', slider, factor=0.01)
 
-            layout.addWidget(qw.QLabel('Opacity'), 2, 0)
+        # opacity
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(1000)
-            layout.addWidget(slider, 2, 1)
+        layout.addWidget(qw.QLabel('Opacity'), 2, 0)
 
-            state_bind_slider(self, state, 'opacity', slider, factor=0.001)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(1000)
+        layout.addWidget(slider, 2, 1)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 3, 0)
-            state_bind_checkbox(self, state, 'visible', cb)
+        state_bind_slider(self, state, 'opacity', slider, factor=0.001)
 
-            cb = qw.QCheckBox('Smooth')
-            layout.addWidget(cb, 3, 1)
-            state_bind_checkbox(self, state, 'smooth', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 3, 0)
+        state_bind_checkbox(self, state, 'visible', cb)
 
-            cb = common.string_choices_to_combobox(TopoCPTChoice)
-            layout.addWidget(qw.QLabel('CPT'), 4, 0)
-            layout.addWidget(cb, 4, 1)
-            state_bind_combobox(self, state, 'cpt', cb)
+        cb = qw.QCheckBox('Smooth')
+        layout.addWidget(cb, 3, 1)
+        state_bind_checkbox(self, state, 'smooth', cb)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, 5, 1)
-            pb.clicked.connect(self.remove)
+        cb = common.string_choices_to_combobox(TopoCPTChoice)
+        layout.addWidget(qw.QLabel('CPT'), 4, 0)
+        layout.addWidget(cb, 4, 1)
+        state_bind_combobox(self, state, 'cpt', cb)
 
-            layout.addWidget(qw.QFrame(), 6, 0, 1, 2)
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, 5, 1)
+        pb.clicked.connect(self.remove)
 
-        self._controls = frame
+        layout.addWidget(qw.QFrame(), 6, 0, 1, 2)
 
-        return self._controls
+        return frame
 
 
 __all__ = [

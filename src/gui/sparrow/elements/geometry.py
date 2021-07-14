@@ -39,23 +39,41 @@ class GeometryState(base.ElementState):
     cpt = base.CPTState.T(default=base.CPTState.D())
 
     def create(self):
-        element = GeometryElement()
-        return element
+        return GeometryElement()
 
 
 class GeometryElement(base.Element):
 
     def __init__(self):
-        self._listeners = []
-        self._parent = None
-        self._state = None
-        self._controls = None
+        base.Element.__init__(self)
 
         self._pipe = None
         self._cbar_pipe = None
         self._outlines_pipe = []
 
         self.cpt_handler = base.CPTHandler()
+        self._controls = None
+
+    def get_name(self):
+        return 'Geometry'
+
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'geometry', 'display_parameter', 'time',
+                'opacity'])]
+
+    def get_parent_state_listeners(self):
+        return [
+            (self.update, ['tmin', 'tmax', 'lat', 'lon'])]
+
+    def bind_state(self, state):
+        base.Element.bind_state(self, state)
+        self.cpt_handler.bind_state(state.cpt, self.update)
+
+    def unbind_state(self):
+        self.cpt_handler.unbind_state()
+        base.Element.unbind_state(self)
 
     def remove(self):
         if self._parent and self._state:
@@ -67,66 +85,18 @@ class GeometryElement(base.Element):
 
     def remove_pipes(self):
         if self._pipe is not None:
-            self._parent.remove_actor(self._pipe.actor)
+            self.remove_actor(self._pipe.actor)
 
         if self._cbar_pipe is not None:
-            self._parent.remove_actor(self._cbar_pipe.actor)
+            self.remove_actor(self._cbar_pipe.actor)
 
         if len(self._outlines_pipe) > 0:
             for pipe in self._outlines_pipe:
-                self._parent.remove_actor(pipe.actor)
+                self.remove_actor(pipe.actor)
 
         self._pipe = None
         self._cbar_pipe = None
         self._outlines_pipe = []
-
-    def set_parent(self, parent):
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        update = self.update
-        self._listeners.append(update)
-        self._parent.state.add_listener(update, 'tmin')
-        self._parent.state.add_listener(update, 'tmax')
-        self._parent.state.add_listener(update, 'lat')
-        self._parent.state.add_listener(update, 'lon')
-
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._pipe:
-                self.remove_pipes()
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
-
-    def bind_state(self, state):
-        base.Element.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'geometry')
-        state.add_listener(upd, 'display_parameter')
-        state.add_listener(upd, 'time')
-        state.add_listener(upd, 'opacity')
-        self.cpt_handler.bind_state(state.cpt, upd)
-
-    def unbind_state(self):
-        for listener in self._listeners:
-            try:
-                listener.release()
-            except Exception:
-                pass
-
-        self.cpt_handler.unbind_state()
-        self._state = None
 
     def get_cpt_name(self, cpt, display_parameter):
         return '{}_{}'.format(cpt, display_parameter)
@@ -139,9 +109,6 @@ class GeometryElement(base.Element):
 
         self.cpt_handler._values = values
         self.cpt_handler.update_cpt()
-
-    def get_name(self):
-        return 'Geometry'
 
     def open_file_load_dialog(self):
         caption = 'Select one file containing a geometry to open'
@@ -165,13 +132,8 @@ class GeometryElement(base.Element):
             raise ValueError(
                 'Imported geometry contains no property to be displayed!')
 
-        self._parent.remove_panel(self._controls)
-        self._controls = None
         self._state.geometry = loaded_geometry
-
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
+        self.update_panel()
         self.update()
 
     def get_values(self, geom):
@@ -242,17 +204,17 @@ class GeometryElement(base.Element):
                         lut=lut)
                     self._cbar_pipe = ColorbarPipe(
                         lut=lut, cbar_title=state.display_parameter)
-                    self._parent.add_actor(self._pipe.actor)
-                    self._parent.add_actor(self._cbar_pipe.actor)
+                    self.add_actor(self._pipe.actor)
+                    self.add_actor(self._cbar_pipe.actor)
 
                     if geo.outlines:
                         self._outlines_pipe.append(OutlinesPipe(
                             geo, color=(1., 1., 1.), cs='latlondepth'))
-                        self._parent.add_actor(
+                        self.add_actor(
                             self._outlines_pipe[-1].actor)
                         self._outlines_pipe.append(OutlinesPipe(
                             geo, color=(0.6, 0.6, 0.6), cs='latlon'))
-                        self._parent.add_actor(
+                        self.add_actor(
                             self._outlines_pipe[-1].actor)
 
                 else:
@@ -268,99 +230,101 @@ class GeometryElement(base.Element):
 
         self._parent.update_view()
 
-    def _get_controls(self):
+    def update_panel(self):
+        from ..state import state_bind_checkbox, state_bind_combobox, \
+            state_bind_slider
+
         state = self._state
-        if not self._controls:
-            from ..state import state_bind_checkbox, state_bind_combobox, \
-                state_bind_slider
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            layout.setAlignment(qc.Qt.AlignTop)
-            frame.setLayout(layout)
+        frame = self._controls
+        layout = qw.QGridLayout()
+        layout.setAlignment(qc.Qt.AlignTop)
+        frame.setLayout(layout)
 
-            # load geometry
-            pb = qw.QPushButton('Load')
-            layout.addWidget(pb, 0, 0)
+        # load geometry
+        pb = qw.QPushButton('Load')
+        layout.addWidget(pb, 0, 0)
 
-            pb.clicked.connect(self.open_file_load_dialog)
+        pb.clicked.connect(self.open_file_load_dialog)
 
-            # property choice
-            il = 1
-            if state.geometry:
+        # property choice
+        il = 1
+        if state.geometry:
 
-                pb = qw.QPushButton('Move to')
-                layout.addWidget(pb, 0, 1)
-                pb.clicked.connect(self.update_view)
+            pb = qw.QPushButton('Move to')
+            layout.addWidget(pb, 0, 1)
+            pb.clicked.connect(self.update_view)
 
-                props = []
-                for prop in state.geometry.properties.get_col_names(
-                        sub_headers=False):
-                    props.append(prop)
+            props = []
+            for prop in state.geometry.properties.get_col_names(
+                    sub_headers=False):
+                props.append(prop)
 
-                layout.addWidget(qw.QLabel('Display parameter'), il, 0)
-                cb = qw.QComboBox()
+            layout.addWidget(qw.QLabel('Display parameter'), il, 0)
+            cb = qw.QComboBox()
 
-                unique_props = list(set(props))
-                for i, s in enumerate(unique_props):
-                    cb.insertItem(i, s)
+            unique_props = list(set(props))
+            for i, s in enumerate(unique_props):
+                cb.insertItem(i, s)
 
-                layout.addWidget(cb, il, 1)
-                state_bind_combobox(self, state, 'display_parameter', cb)
+            layout.addWidget(cb, il, 1)
+            state_bind_combobox(self, state, 'display_parameter', cb)
 
-                # color maps
-                self.cpt_handler.cpt_controls(
-                    self._parent, self._state.cpt, layout)
-                il = layout.rowCount() + 1
+            # color maps
+            self.cpt_handler.cpt_controls(self._parent, state.cpt, layout)
+            il = layout.rowCount() + 1
 
-                # times slider
-                values = state.geometry.get_property(state.display_parameter)
-                if len(values.shape) == 2:
-                    slider = qw.QSlider(qc.Qt.Horizontal)
-                    slider.setSizePolicy(
-                        qw.QSizePolicy(
-                            qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+            # times slider
+            values = state.geometry.get_property(state.display_parameter)
+            if len(values.shape) == 2:
+                slider = qw.QSlider(qc.Qt.Horizontal)
+                slider.setSizePolicy(
+                    qw.QSizePolicy(
+                        qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
 
-                    slider.setMinimum(state.geometry.times.min())
-                    slider.setMaximum(state.geometry.times.max())
-                    slider.setSingleStep(state.geometry.deltat)
-                    slider.setPageStep(state.geometry.deltat)
+                slider.setMinimum(state.geometry.times.min())
+                slider.setMaximum(state.geometry.times.max())
+                slider.setSingleStep(state.geometry.deltat)
+                slider.setPageStep(state.geometry.deltat)
 
-                    layout.addWidget(qw.QLabel('Time'), il, 0)
-                    layout.addWidget(slider, il, 1)
+                layout.addWidget(qw.QLabel('Time'), il, 0)
+                layout.addWidget(slider, il, 1)
 
-                    slider_opacity = qw.QSlider(qc.Qt.Horizontal)
-                    slider_opacity.setSizePolicy(
-                        qw.QSizePolicy(
-                            qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-                    slider_opacity.setMinimum(0)
-                    slider_opacity.setMaximum(1000)
-
-                    il += 1
-                    layout.addWidget(slider_opacity, il, 1)
-                    layout.addWidget(qw.QLabel('Opacity'), il, 0)
-
-                    state_bind_slider(
-                        self, state, 'opacity', slider_opacity, factor=0.001)
-
-                    state_bind_slider(
-                        self, state, 'time', slider, dtype=int)
+                slider_opacity = qw.QSlider(qc.Qt.Horizontal)
+                slider_opacity.setSizePolicy(
+                    qw.QSizePolicy(
+                        qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+                slider_opacity.setMinimum(0)
+                slider_opacity.setMaximum(1000)
 
                 il += 1
-                pb = qw.QPushButton('Remove')
-                layout.addWidget(pb, il, 1)
-                pb.clicked.connect(self.remove)
+                layout.addWidget(slider_opacity, il, 1)
+                layout.addWidget(qw.QLabel('Opacity'), il, 0)
 
-                self.cpt_handler._update_cpt_combobox()
-                self.cpt_handler._update_cptscale_lineedit()
+                state_bind_slider(
+                    self, state, 'opacity', slider_opacity, factor=0.001)
 
-                # visibility
-                cb = qw.QCheckBox('Show')
-                layout.addWidget(cb, il, 0)
-                state_bind_checkbox(self, state, 'visible', cb)
+                state_bind_slider(
+                    self, state, 'time', slider, dtype=int)
 
-            self._controls = frame
+            il += 1
+            pb = qw.QPushButton('Remove')
+            layout.addWidget(pb, il, 1)
+            pb.clicked.connect(self.remove)
 
+            self.cpt_handler._update_cpt_combobox()
+            self.cpt_handler._update_cptscale_lineedit()
+
+            # visibility
+            cb = qw.QCheckBox('Show')
+            layout.addWidget(cb, il, 0)
+            state_bind_checkbox(self, state, 'visible', cb)
+
+        frame.update()
+
+    def get_panel(self):
+        self._controls = qw.QFrame()
+        self.update_panel()
         return self._controls
 
 

@@ -53,9 +53,7 @@ class ActiveFaultsState(ElementState):
     color_by_slip_type = Bool.T(default=False)
 
     def create(self):
-        element = ActiveFaultsElement()
-        element.bind_state(self)
-        return element
+        return ActiveFaultsElement()
 
 
 class FaultlinesPipe(object):
@@ -128,45 +126,14 @@ class ActiveFaultsElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._parent = None
-        self._state = None
         self._pipe = None
-        self._controls = None
-        self._active_faults = None
-
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        self.register_state_listener3(self.update, state, 'visible')
-        self.register_state_listener3(self.update, state, 'line_width')
-        self.register_state_listener3(self.update, state, 'color_by_slip_type')
+        self._active_faults = ActiveFaults()
 
     def get_name(self):
         return 'Active Faults'
 
-    def set_parent(self, parent):
-        self._parent = parent
-        if not self._active_faults:
-            self._active_faults = ActiveFaults()
-
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._pipe:
-                for actor in self._pipe.get_actors():
-                    self._parent.remove_actor(actor)
-
-                self._pipe = None
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
+    def get_state_listeners(self):
+        return [(self.update, ['visible', 'line_width', 'color_by_slip_type'])]
 
     def update(self, *args):
 
@@ -184,53 +151,50 @@ class ActiveFaultsElement(Element):
 
         if state.visible:
             for actor in self._pipe.get_actors():
-                self._parent.add_actor(actor)
+                self.add_actor(actor)
 
         else:
             for actor in self._pipe.get_actors():
-                self._parent.remove_actor(actor)
+                self.remove_actor(actor)
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if self._controls is None:
-            from ..state import state_bind_checkbox, state_bind_slider
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_slider
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            layout.setAlignment(qc.Qt.AlignTop)
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        layout.setAlignment(qc.Qt.AlignTop)
+        frame.setLayout(layout)
 
-            layout.addWidget(qw.QLabel('Line width'), 0, 0)
+        layout.addWidget(qw.QLabel('Line width'), 0, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(10)
-            slider.setSingleStep(0.5)
-            slider.setPageStep(1)
-            layout.addWidget(slider, 0, 1)
-            state_bind_slider(self, self._state, 'line_width', slider)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(10)
+        slider.setSingleStep(0.5)
+        slider.setPageStep(1)
+        layout.addWidget(slider, 0, 1)
+        state_bind_slider(self, self._state, 'line_width', slider)
 
-            cb = qw.QCheckBox('Show')
-            cb_color_slip_type = qw.QCheckBox('Color by slip type')
+        cb = qw.QCheckBox('Show')
+        cb_color_slip_type = qw.QCheckBox('Color by slip type')
 
-            layout.addWidget(cb_color_slip_type, 1, 0)
-            state_bind_checkbox(self, self._state, 'color_by_slip_type',
-                                cb_color_slip_type)
+        layout.addWidget(cb_color_slip_type, 1, 0)
+        state_bind_checkbox(
+            self, self._state, 'color_by_slip_type', cb_color_slip_type)
 
-            layout.addWidget(cb, 2, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        layout.addWidget(cb, 2, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, 2, 1)
-            pb.clicked.connect(self.remove)
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, 2, 1)
+        pb.clicked.connect(self.remove)
 
-            self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

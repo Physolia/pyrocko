@@ -127,69 +127,39 @@ class SourceState(base.ElementState):
         return 'Source'
 
     def create(self):
-        element = SourceElement()
-        return element
+        return SourceElement()
 
 
 class SourceElement(base.Element):
 
     def __init__(self):
         base.Element.__init__(self)
-        self._parent = None
         self._pipe = []
-        self._controls = None
         self._points = num.array([])
-
         self.cpt_handler = base.CPTHandler()
+        self._controls = None
+
+    def get_name(self):
+        return 'Source'
+
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'source_selection', 'deltat', 'display_parameter'])]
+
+    def bind_state(self, state):
+        base.Element.bind_state(self, state)
+        self.cpt_handler.bind_state(state.cpt)
+
+    def unbind_state(self):
+        self.cpt_handler.unbind_state()
+        base.Element.unbind_state()
 
     def _state_bind_source(self, *args, **kwargs):
         vstate.state_bind(self, self._state.source_selection, *args, **kwargs)
 
     def _state_bind_store(self, *args, **kwargs):
         vstate.state_bind(self, self._state, *args, **kwargs)
-
-    def bind_state(self, state):
-        base.Element.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'source_selection')
-        state.add_listener(upd, 'deltat')
-        state.add_listener(upd, 'display_parameter')
-        self.cpt_handler.bind_state(state.cpt, upd)
-
-    def unbind_state(self):
-        self._listeners = []
-        self._state = None
-        self.cpt_handler.unbind_state()
-
-    def get_name(self):
-        return 'Source'
-
-    def set_parent(self, parent):
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._pipe:
-                for pipe in self._pipe:
-                    if isinstance(pipe.actor, list):
-                        for act in pipe.actor:
-                            self._parent.remove_actor(act)
-                    else:
-                        self._parent.remove_actor(pipe.actor)
-                self._pipe = []
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
 
     def open_file_load_dialog(self):
         caption = 'Select one file to open'
@@ -212,11 +182,8 @@ class SourceElement(base.Element):
                 for prop in loaded_source.T.propnames
                 if getattr(loaded_source, prop)})
 
-        self._parent.remove_panel(self._controls)
-        self._controls = None
         self._state.source_selection = source
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
+        self.update_panel()
 
         self.update()
 
@@ -274,12 +241,12 @@ class SourceElement(base.Element):
         if source_geom.outlines:
             self._pipe.append(OutlinesPipe(
                 source_geom, color=(1., 1., 1.), cs='latlondepth'))
-            self._parent.add_actor(
+            self.add_actor(
                 self._pipe[-1].actor)
 
             self._pipe.append(OutlinesPipe(
                 source_geom, color=(0.6, 0.6, 0.6), cs='latlon'))
-            self._parent.add_actor(
+            self.add_actor(
                 self._pipe[-1].actor)
 
     def _update_scatter(self, source, fault):
@@ -301,7 +268,7 @@ class SourceElement(base.Element):
             p.set_symbol('sphere')
             p.set_colors(color)
             self._pipe.append(p)
-            self._parent.add_actor(p.actor)
+            self.add_actor(p.actor)
 
     def _update_raster(self, source_geom, param):
         vertices = geometry.arr_vertices(
@@ -322,7 +289,7 @@ class SourceElement(base.Element):
             values=self.cpt_handler._values, lut=self.cpt_handler._lookuptable)
 
         self._pipe.append(poly_pipe)
-        self._parent.add_actor(self._pipe[-1].actor)
+        self.add_actor(self._pipe[-1].actor)
 
         if cbar_title is not None:
             cbar_pipe = ColorbarPipe(
@@ -330,7 +297,7 @@ class SourceElement(base.Element):
                 lut=self.cpt_handler._lookuptable)
 
             self._pipe.append(cbar_pipe)
-            self._parent.add_actor(self._pipe[-1].actor)
+            self.add_actor(self._pipe[-1].actor)
 
     def _update_rake_arrow(self, fault):
         source = self._state.source_selection
@@ -354,7 +321,7 @@ class SourceElement(base.Element):
         vertices = geometry.arr_vertices(points)
 
         self._pipe.append(ArrowPipe(vertices[0], vertices[1]))
-        self._parent.add_actor(self._pipe[-1].actor)
+        self.add_actor(self._pipe[-1].actor)
 
     def update(self, *args):
         state = self._state
@@ -366,7 +333,7 @@ class SourceElement(base.Element):
 
         if self._pipe:
             for pipe in self._pipe:
-                self._parent.remove_actor(pipe.actor)
+                self.remove_actor(pipe.actor)
 
             self._pipe = []
 
@@ -375,142 +342,146 @@ class SourceElement(base.Element):
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import \
-                state_bind_checkbox, state_bind_slider, state_bind_combobox
-            from pyrocko import gf
+    def update_panel(self):
 
-            source = self._state.source_selection
+        from ..state import \
+            state_bind_checkbox, state_bind_slider, state_bind_combobox
+        from pyrocko import gf
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = self._controls
 
-            def state_to_lineedit(state, attribute, widget):
-                sel = getattr(state, attribute)
+        source = self._state.source_selection
 
-                widget.setText('%g' % sel)
-                # if sel:
-                #     widget.selectAll()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            def lineedit_to_state(widget, state, attribute):
-                s = float(widget.text())
-                try:
-                    setattr(state, attribute, s)
-                except Exception:
-                    raise ValueError(
-                        'Value of %s needs to be a float or integer'
-                        % string.capwords(attribute))
+        def state_to_lineedit(state, attribute, widget):
+            sel = getattr(state, attribute)
 
-            for il, label in enumerate(source.T.propnames):
-                if label in source._ranges.keys():
+            widget.setText('%g' % sel)
+            # if sel:
+            #     widget.selectAll()
 
-                    layout.addWidget(qw.QLabel(
-                        string.capwords(label) + ':'), il, 0)
+        def lineedit_to_state(widget, state, attribute):
+            s = float(widget.text())
+            try:
+                setattr(state, attribute, s)
+            except Exception:
+                raise ValueError(
+                    'Value of %s needs to be a float or integer'
+                    % string.capwords(attribute))
 
-                    slider = qw.QSlider(qc.Qt.Horizontal)
-                    slider.setSizePolicy(
-                        qw.QSizePolicy(
-                            qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-                    slider.setMinimum(source._ranges[label]['min'])
-                    slider.setMaximum(source._ranges[label]['max'])
-                    slider.setSingleStep(source._ranges[label]['step'])
-                    slider.setPageStep(source._ranges[label]['step'])
-                    layout.addWidget(slider, il, 1)
-                    try:
-                        state_bind_slider(
-                            self, self._state.source_selection, label, slider,
-                            factor=source._ranges[label]['fac'])
-                    except Exception:
-                        state_bind_slider(
-                            self, self._state.source_selection, label, slider)
+        for il, label in enumerate(source.T.propnames):
+            if label in source._ranges.keys():
 
-                    le = qw.QLineEdit()
-                    layout.addWidget(le, il, 2)
+                layout.addWidget(qw.QLabel(
+                    string.capwords(label) + ':'), il, 0)
 
-                    self._state_bind_source(
-                        [label], lineedit_to_state, le,
-                        [le.editingFinished, le.returnPressed],
-                        state_to_lineedit, attribute=label)
-
-            for label, name in zip(
-                    ['GF dt:'], ['deltat']):
-                il += 1
-                layout.addWidget(qw.QLabel(label), il, 0)
                 slider = qw.QSlider(qc.Qt.Horizontal)
                 slider.setSizePolicy(
                     qw.QSizePolicy(
                         qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-                slider.setMinimum(1.)
-                slider.setMaximum(1000.)
-                slider.setSingleStep(1)
-                slider.setPageStep(1)
+                slider.setMinimum(source._ranges[label]['min'])
+                slider.setMaximum(source._ranges[label]['max'])
+                slider.setSingleStep(source._ranges[label]['step'])
+                slider.setPageStep(source._ranges[label]['step'])
                 layout.addWidget(slider, il, 1)
-                state_bind_slider(
-                    self, self._state, name, slider, factor=0.01)
+                try:
+                    state_bind_slider(
+                        self, self._state.source_selection, label, slider,
+                        factor=source._ranges[label]['fac'])
+                except Exception:
+                    state_bind_slider(
+                        self, self._state.source_selection, label, slider)
 
                 le = qw.QLineEdit()
                 layout.addWidget(le, il, 2)
 
-                self._state_bind_store(
-                    [name], lineedit_to_state, le,
+                self._state_bind_source(
+                    [label], lineedit_to_state, le,
                     [le.editingFinished, le.returnPressed],
-                    state_to_lineedit, attribute=name)
+                    state_to_lineedit, attribute=label)
 
+        for label, name in zip(
+                ['GF dt:'], ['deltat']):
             il += 1
-            layout.addWidget(qw.QLabel('Anchor:'), il, 0)
+            layout.addWidget(qw.QLabel(label), il, 0)
+            slider = qw.QSlider(qc.Qt.Horizontal)
+            slider.setSizePolicy(
+                qw.QSizePolicy(
+                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+            slider.setMinimum(1.)
+            slider.setMaximum(1000.)
+            slider.setSingleStep(1)
+            slider.setPageStep(1)
+            layout.addWidget(slider, il, 1)
+            state_bind_slider(
+                self, self._state, name, slider, factor=0.01)
 
-            cb = qw.QComboBox()
-            for i, s in enumerate(gf.RectangularSource.anchor.choices):
-                cb.insertItem(i, s)
-            layout.addWidget(cb, il, 1, 1, 2)
-            state_bind_combobox(
-                self, self._state.source_selection, 'anchor', cb)
+            le = qw.QLineEdit()
+            layout.addWidget(le, il, 2)
 
-            il += 1
-            layout.addWidget(qw.QLabel('Display Param.:'), il, 0)
+            self._state_bind_store(
+                [name], lineedit_to_state, le,
+                [le.editingFinished, le.returnPressed],
+                state_to_lineedit, attribute=name)
 
-            cb = qw.QComboBox()
-            for i, s in enumerate(parameter_label.keys()):
-                cb.insertItem(i, s)
-            layout.addWidget(cb, il, 1)
-            state_bind_combobox(
-                self, self._state, 'display_parameter', cb)
+        il += 1
+        layout.addWidget(qw.QLabel('Anchor:'), il, 0)
 
-            self.cpt_handler.cpt_controls(
-                self._parent, self._state.cpt, layout)
+        cb = qw.QComboBox()
+        for i, s in enumerate(gf.RectangularSource.anchor.choices):
+            cb.insertItem(i, s)
+        layout.addWidget(cb, il, 1, 1, 2)
+        state_bind_combobox(
+            self, self._state.source_selection, 'anchor', cb)
 
-            il = layout.rowCount() + 1
-            pb = qw.QPushButton('Move Source Here')
-            layout.addWidget(pb, il, 0)
-            pb.clicked.connect(self.update_loc)
+        il += 1
+        layout.addWidget(qw.QLabel('Display Param.:'), il, 0)
 
-            pb = qw.QPushButton('Load')
-            layout.addWidget(pb, il, 1)
-            pb.clicked.connect(self.open_file_load_dialog)
+        cb = qw.QComboBox()
+        for i, s in enumerate(parameter_label.keys()):
+            cb.insertItem(i, s)
+        layout.addWidget(cb, il, 1)
+        state_bind_combobox(
+            self, self._state, 'display_parameter', cb)
 
-            pb = qw.QPushButton('Save')
-            layout.addWidget(pb, il, 2)
-            pb.clicked.connect(self.open_file_save_dialog)
+        self.cpt_handler.cpt_controls(
+            self._parent, self._state.cpt, layout)
 
-            il += 1
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, il, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        il = layout.rowCount() + 1
+        pb = qw.QPushButton('Move Source Here')
+        layout.addWidget(pb, il, 0)
+        pb.clicked.connect(self.update_loc)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, il, 2)
-            pb.clicked.connect(self.remove)
+        pb = qw.QPushButton('Load')
+        layout.addWidget(pb, il, 1)
+        pb.clicked.connect(self.open_file_load_dialog)
 
-            il += 1
-            layout.addWidget(qw.QFrame(), il, 0, 1, 3)
+        pb = qw.QPushButton('Save')
+        layout.addWidget(pb, il, 2)
+        pb.clicked.connect(self.open_file_save_dialog)
+
+        il += 1
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, il, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
+
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, il, 2)
+        pb.clicked.connect(self.remove)
+
+        il += 1
+        layout.addWidget(qw.QFrame(), il, 0, 1, 3)
 
         self._controls = frame
 
         self.cpt_handler._update_cpt_combobox()
         self.cpt_handler._update_cptscale_lineedit()
 
+    def get_panel(self):
+        self._controls = qw.QFrame()
+        self.update_panel()
         return self._controls
 
 

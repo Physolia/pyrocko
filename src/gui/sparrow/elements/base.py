@@ -41,8 +41,19 @@ class ElementState(TalkieRoot):
 class Element(object):
     def __init__(self):
         self._listeners = []
+        self._actors = []
+        self._actors_2d = []
         self._parent = None
         self._state = None
+
+    def get_name(self):
+        return 'Untitled Element'
+
+    def get_state_listeners(self):
+        return []
+
+    def get_parent_state_listeners(self):
+        return []
 
     def register_state_listener(self, listener):
         self._listeners.append(listener)  # keep listeners alive
@@ -54,14 +65,11 @@ class Element(object):
         if self._parent and self._state:
             self._parent.state.elements.remove(self._state)
 
-    def set_parent(self, parent):
-        self._parent = parent
-
-    def unset_parent(self):
-        self._parent = None
-
     def bind_state(self, state):
         self._state = state
+        for meth, names in self.get_state_listeners():
+            for name in names:
+                self.register_state_listener3(meth, state, name)
 
     def unbind_state(self):
         for listener in self._listeners:
@@ -72,6 +80,63 @@ class Element(object):
 
         self._listeners = []
         self._state = None
+
+    def set_parent(self, parent):
+        self._parent = parent
+        for meth, names in self.get_parent_state_listeners():
+            for name in names:
+                self.register_state_listener3(meth, self._parent.state, name)
+
+        self._panel = self.get_panel()
+        if self._panel:
+            self._parent.add_panel(
+                self.get_name(), self._panel, visible=True)
+
+        done = set()
+        for listener_ref in self._listeners:
+            meth = listener_ref._listener
+            if meth not in done:
+                meth()
+
+            done.add(meth)
+
+    def unset_parent(self):
+        self.unbind_state()
+        if self._panel:
+            self._parent.remove_panel(self._panel)
+            self._panel = None
+
+        while self._actors:
+            self.remove_actor(self._actors[-1])
+
+        while self._actors_2d:
+            self.remove_actor_2d(self._actors_2d[-1])
+
+        self._parent.update_view()
+        self._parent = None
+
+    def add_actor(self, actor):
+        if actor not in self._actors:
+            self._actors.append(actor)
+            self._parent.add_actor(actor)
+
+    def remove_actor(self, actor):
+        if actor in self._actors:
+            self._parent.remove_actor(actor)
+            self._actors.remove(actor)
+
+    def add_actor_2d(self, actor):
+        if actor not in self._actors_2d:
+            self._actors_2d.append(actor)
+            self._parent.add_actor_2d(actor)
+
+    def remove_actor_2d(self, actor):
+        if actor in self._actors_2d:
+            self._parent.remove_actor_2d(actor)
+            self._actors_2d.remove(actor)
+
+    def get_panel(self):
+        return None
 
 
 class CPTChoice(StringChoice):

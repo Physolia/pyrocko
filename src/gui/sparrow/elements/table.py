@@ -62,13 +62,12 @@ class TableState(base.ElementState):
 class TableElement(base.Element):
     def __init__(self):
         base.Element.__init__(self)
-        self._parent = None
+        self._controls = None
 
         self._table = None
         self._istate = 0
         self._istate_view = 0
 
-        self._controls = None
         self._color_combobox = None
         self._size_combobox = None
 
@@ -78,44 +77,43 @@ class TableElement(base.Element):
 
         self.cpt_handler = base.CPTHandler()
 
-    def bind_state(self, state):
-        base.Element.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'symbol')
-        state.add_listener(upd, 'size')
-        state.add_listener(upd, 'depth_offset')
-        state.add_listener(upd, 'color_parameter')
-
-        self.cpt_handler.bind_state(state.cpt, upd)
-
-        upd_s = self.update_sizes
-        self._listeners.append(upd_s)
-        state.add_listener(upd_s, 'size_parameter')
-
-    def unbind_state(self):
-
-        self.cpt_handler.unbind_state()
-        self._listeners = []
-        self._state = None
-
     def get_name(self):
         return 'Table'
 
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'symbol', 'size', 'depth_offset',
+                'color_parameter']),
+            (self.update_sizes, [
+                'size_parameter'])]
+
+    def bind_state(self, state):
+        base.Element.bind_state(self, state)
+        self.cpt_handler.bind_state(state.cpt, self.update)
+
+    def unbind_state(self):
+        self.cpt_handler.unbind_state()
+        base.Element.unbind_state(self)
+
+    def get_parent_state_listeners(self):
+        return [
+            (self.update_alpha, ['tmin', 'tmax'])]
+
     def set_parent(self, parent):
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        update_alpha = self.update_alpha
-        self._listeners.append(update_alpha)
-        self._parent.state.add_listener(update_alpha, 'tmin')
-        self._parent.state.add_listener(update_alpha, 'tmax')
-
+        base.Element.set_parent(self, parent)
         self._parent.register_data_provider(self)
 
-        self.update()
+    def unset_parent(self):
+        self._parent.unregister_data_provider(self)
+        base.Element.unset_parent(self)
+
+    def _clear_pipes(self):
+        if self._pipes is not None:
+            for p in self._pipes:
+                self._parent.remove_actor(p.actor)
+
+            self._pipes = None
 
     def iter_data(self, name):
         if self._table and self._table.has_col(name):
@@ -130,27 +128,6 @@ class TableElement(base.Element):
         self._istate += 1
         self.update()
 
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            self._parent.unregister_data_provider(self)
-
-            self._clear_pipes()
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
-
-    def _clear_pipes(self):
-        if self._pipes is not None:
-            for p in self._pipes:
-                self._parent.remove_actor(p.actor)
-
-            self._pipes = None
-
     def update(self, *args):
         state = self._state
         if self._pipes is not None and self._istate != self._istate_view:
@@ -159,7 +136,7 @@ class TableElement(base.Element):
         if not state.visible:
             if self._pipes is not None:
                 for p in self._pipes:
-                    self._parent.remove_actor(p.actor)
+                    self.remove_actor(p.actor)
 
         else:
             if self._istate != self._istate_view and self._table:
@@ -187,7 +164,7 @@ class TableElement(base.Element):
 
             if self._pipes is not None:
                 for i, p in enumerate(self._pipes):
-                    self._parent.add_actor(p.actor)
+                    self.add_actor(p.actor)
                     p.set_size(state.size * (self._isize_min + i)**1.3)
 
                 if state.color_parameter:
@@ -231,96 +208,95 @@ class TableElement(base.Element):
     def _get_table_widgets_start(self):
         return 0
 
-    def _get_controls(self):
-        if self._controls is None:
-            from ..state import state_bind_checkbox, state_bind_slider, \
-                state_bind_combobox
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_slider, \
+            state_bind_combobox
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            iy = self._get_table_widgets_start()
+        iy = self._get_table_widgets_start()
 
-            layout.addWidget(qw.QLabel('Size'), iy, 0)
+        layout.addWidget(qw.QLabel('Size'), iy, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(100)
-            layout.addWidget(slider, iy, 1)
-            state_bind_slider(self, self._state, 'size', slider, factor=0.1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(100)
+        layout.addWidget(slider, iy, 1)
+        state_bind_slider(self, self._state, 'size', slider, factor=0.1)
 
-            iy += 1
+        iy += 1
 
-            layout.addWidget(qw.QLabel('Size'), iy, 0)
+        layout.addWidget(qw.QLabel('Size'), iy, 0)
 
-            cb = qw.QComboBox()
+        cb = qw.QComboBox()
 
-            layout.addWidget(cb, iy, 1)
-            state_bind_combobox(
-                self, self._state, 'size_parameter', cb)
+        layout.addWidget(cb, iy, 1)
+        state_bind_combobox(
+            self, self._state, 'size_parameter', cb)
 
-            self._size_combobox = cb
+        self._size_combobox = cb
 
-            iy += 1
+        iy += 1
 
-            layout.addWidget(qw.QLabel('Color'), iy, 0)
+        layout.addWidget(qw.QLabel('Color'), iy, 0)
 
-            cb = qw.QComboBox()
+        cb = qw.QComboBox()
 
-            layout.addWidget(cb, iy, 1)
-            state_bind_combobox(
-                self, self._state, 'color_parameter', cb)
+        layout.addWidget(cb, iy, 1)
+        state_bind_combobox(
+            self, self._state, 'color_parameter', cb)
 
-            self._color_combobox = cb
+        self._color_combobox = cb
 
-            self.cpt_handler.cpt_controls(
-                self._parent, self._state.cpt, layout)
+        self.cpt_handler.cpt_controls(
+            self._parent, self._state.cpt, layout)
 
-            iy = layout.rowCount() + 1
+        iy = layout.rowCount() + 1
 
-            layout.addWidget(qw.QLabel('Symbol'), iy, 0)
+        layout.addWidget(qw.QLabel('Symbol'), iy, 0)
 
-            cb = common.string_choices_to_combobox(SymbolChoice)
+        cb = common.string_choices_to_combobox(SymbolChoice)
 
-            layout.addWidget(cb, iy, 1)
-            state_bind_combobox(
-                self, self._state, 'symbol', cb)
+        layout.addWidget(cb, iy, 1)
+        state_bind_combobox(
+            self, self._state, 'symbol', cb)
 
-            iy += 1
+        iy += 1
 
-            layout.addWidget(qw.QLabel('Depth Offset'), iy, 0)
+        layout.addWidget(qw.QLabel('Depth Offset'), iy, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(100)
-            layout.addWidget(slider, iy, 1)
-            state_bind_slider(
-                self, self._state, 'depth_offset', slider, factor=1000.)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(100)
+        layout.addWidget(slider, iy, 1)
+        state_bind_slider(
+            self, self._state, 'depth_offset', slider, factor=1000.)
 
-            iy += 1
+        iy += 1
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, iy, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, iy, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, iy, 1)
-            pb.clicked.connect(self.remove)
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, iy, 1)
+        pb.clicked.connect(self.remove)
 
-            iy += 1
+        iy += 1
 
-            layout.addWidget(qw.QFrame(), iy, 0, 1, 3)
+        layout.addWidget(qw.QFrame(), iy, 0, 1, 3)
 
-            self._controls = frame
+        self._controls = frame
 
-            self._update_controls()
+        self._update_controls()
 
         return self._controls
 

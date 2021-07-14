@@ -114,76 +114,38 @@ class CoastlinesState(ElementState):
     line_width = Float.T(default=1.0)
 
     def create(self):
-        element = CoastlinesElement()
-        return element
+        return CoastlinesElement()
 
 
 class CoastlinesElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._parent = None
-        self._controls = None
         self._coastlines = None
 
     def get_name(self):
         return 'Coastlines'
 
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        upd = self.update
-        self._listeners = [upd]
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'resolution')
-        state.add_listener(upd, 'opacity')
-        state.add_listener(upd, 'color')
-        state.add_listener(upd, 'line_width')
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'resolution', 'opacity', 'color', 'line_width'])]
 
-    def unbind_state(self):
-        self._listeners = []
-
-    def set_parent(self, parent):
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        upd = self.update_clipping
-        self._listeners.append(upd)
-
-        self._parent.state.add_listener(upd, 'lat')
-        self._parent.state.add_listener(upd, 'lon')
-        self._parent.state.add_listener(upd, 'depth')
-        self._parent.state.add_listener(upd, 'distance')
-        self._parent.state.add_listener(upd, 'azimuth')
-        self._parent.state.add_listener(upd, 'dip')
-
-        self.update()
-        self.update_clipping()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._coastlines:
-                self._parent.remove_actor(self._coastlines.actor)
-                self._coastlines = None
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
+    def get_parent_state_listeners(self):
+        return [
+            (self.update_clipping, [
+                'lat', 'lon', 'depth', 'distance', 'azimuth', 'dip'])]
 
     def update(self, *args):
         state = self._state
         if not state.visible and self._coastlines:
-            self._parent.remove_actor(self._coastlines.actor)
+            self.remove_actor(self._coastlines.actor)
 
         if state.visible:
             if not self._coastlines:
                 self._coastlines = CoastlinesPipe(resolution=state.resolution)
 
-            self._parent.add_actor(self._coastlines.actor)
+            self.add_actor(self._coastlines.actor)
             self._coastlines.set_resolution(state.resolution)
             self._coastlines.set_opacity(state.opacity)
             self._coastlines.set_color(state.color)
@@ -197,73 +159,70 @@ class CoastlinesElement(Element):
             origin = cam / num.linalg.norm(cam)**2
             self._coastlines.set_clipping_plane(origin, cam)
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import state_bind_combobox, \
-                state_bind_checkbox, state_bind_slider, \
-                state_bind_combobox_color
+    def get_panel(self):
+        from ..state import state_bind_combobox, \
+            state_bind_checkbox, state_bind_slider, \
+            state_bind_combobox_color
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            layout.addWidget(qw.QLabel('Resolution'), 0, 0)
+        layout.addWidget(qw.QLabel('Resolution'), 0, 0)
 
-            cb = common.string_choices_to_combobox(CoastlineResolutionChoice)
-            layout.addWidget(cb, 0, 1)
-            state_bind_combobox(self, self._state, 'resolution', cb)
+        cb = common.string_choices_to_combobox(CoastlineResolutionChoice)
+        layout.addWidget(cb, 0, 1)
+        state_bind_combobox(self, self._state, 'resolution', cb)
 
-            # opacity
+        # opacity
 
-            layout.addWidget(qw.QLabel('Opacity'), 1, 0)
+        layout.addWidget(qw.QLabel('Opacity'), 1, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(1000)
-            layout.addWidget(slider, 1, 1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(1000)
+        layout.addWidget(slider, 1, 1)
 
-            state_bind_slider(
-                self, self._state, 'opacity', slider, factor=0.001)
+        state_bind_slider(
+            self, self._state, 'opacity', slider, factor=0.001)
 
-            # color
+        # color
 
-            layout.addWidget(qw.QLabel('Color'), 2, 0)
+        layout.addWidget(qw.QLabel('Color'), 2, 0)
 
-            cb = common.strings_to_combobox(
-                ['black', 'white'])
+        cb = common.strings_to_combobox(
+            ['black', 'white'])
 
-            layout.addWidget(cb, 2, 1)
-            state_bind_combobox_color(
-                self, self._state, 'color', cb)
+        layout.addWidget(cb, 2, 1)
+        state_bind_combobox_color(
+            self, self._state, 'color', cb)
 
-            layout.addWidget(qw.QLabel('Line width'), 3, 0)
+        layout.addWidget(qw.QLabel('Line width'), 3, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(100)
-            layout.addWidget(slider, 3, 1)
-            state_bind_slider(
-                self, self._state, 'line_width', slider, factor=0.1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(100)
+        layout.addWidget(slider, 3, 1)
+        state_bind_slider(
+            self, self._state, 'line_width', slider, factor=0.1)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 4, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 4, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, 4, 1)
-            pb.clicked.connect(self.remove)
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, 4, 1)
+        pb.clicked.connect(self.remove)
 
-            layout.addWidget(qw.QFrame(), 5, 0, 1, 2)
+        layout.addWidget(qw.QFrame(), 5, 0, 1, 2)
 
-        self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

@@ -53,8 +53,7 @@ class VolcanoesState(ElementState):
     size = Float.T(default=3.0)
 
     def create(self):
-        element = VolcanoesElement()
-        return element
+        return VolcanoesElement()
 
 
 class VolcanoesElement(Element):
@@ -63,39 +62,14 @@ class VolcanoesElement(Element):
         Element.__init__(self)
         self._pipe = None
         self._controls = None
-        self._volcanoes = None
+        self._volcanoes = Volcanoes()
 
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        self._listeners.append(
-            state.add_listener(self.update, 'visible'))
-        self._listeners.append(
-            state.add_listener(self.update, 'size'))
+    def get_state_listeners(self):
+        return [
+            (self.update, ['visible', 'size'])]
 
     def get_name(self):
         return 'Volcanoes'
-
-    def set_parent(self, parent):
-        self._parent = parent
-        if not self._volcanoes:
-            self._volcanoes = Volcanoes()
-
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if not self._parent:
-            return
-        self._parent.remove_actor(self._pipe.actor)
-        self._pipe = None
-
-        self._parent.remove_panel(self._controls)
-        self._controls = None
-
-        self._parent.update_view()
-        self._parent = None
 
     def update(self, *args):
         state = self._state
@@ -110,41 +84,38 @@ class VolcanoesElement(Element):
 
             self._pipe.set_size(state.size)
             self._pipe.set_symbol('sphere')
-            self._parent.add_actor(self._pipe.actor)
+            self.add_actor(self._pipe.actor)
 
         else:
-            self._parent.remove_actor(self._pipe.actor)
+            self.remove_actor(self._pipe.actor)
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import state_bind_checkbox, state_bind_slider
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_slider
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            layout.addWidget(qw.QLabel('Size'), 0, 0)
+        layout.addWidget(qw.QLabel('Size'), 0, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(10)
-            slider.setSingleStep(0.5)
-            slider.setPageStep(1)
-            layout.addWidget(slider, 0, 1)
-            state_bind_slider(self, self._state, 'size', slider)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(10)
+        slider.setSingleStep(0.5)
+        slider.setPageStep(1)
+        layout.addWidget(slider, 0, 1)
+        state_bind_slider(self, self._state, 'size', slider)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 1, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 1, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

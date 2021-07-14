@@ -41,44 +41,27 @@ class IcosphereState(ElementState):
     depth = Float.T(default=30.0*km)
 
     def create(self):
-        element = IcosphereElement()
-        return element
+        return IcosphereElement()
 
 
 class IcosphereElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self.parent = None
         self._mesh = None
-        self._controls = None
         self._params = None
 
     def get_name(self):
         return 'Icosphere'
 
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'level')
-        state.add_listener(upd, 'base')
-        state.add_listener(upd, 'kind')
-        state.add_listener(upd, 'smooth')
-        state.add_listener(upd, 'color')
-        state.add_listener(upd, 'depth')
-        state.add_listener(upd, 'opacity')
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'level', 'base', 'kind', 'smooth', 'color',
+                'depth', 'opacity'])]
 
-    def set_parent(self, parent):
-        self.parent = parent
-        upd = self.update
-        self._listeners.append(upd)
-        self.parent.state.add_listener(upd, 'dip')
-
-        self.parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
+    def get_parent_state_listeners(self):
+        return [(self.update, ['dip'])]
 
     def update(self, *args):
         state = self._state
@@ -86,7 +69,7 @@ class IcosphereElement(Element):
         params = state.level, state.base, state.kind, state.smooth
 
         if self._mesh and (params != self._params or not state.visible):
-            self.parent.remove_actor(self._mesh.actor)
+            self.remove_actor(self._mesh.actor)
             self._mesh = None
 
         if state.visible and not self._mesh:
@@ -100,14 +83,14 @@ class IcosphereElement(Element):
             self._mesh = TrimeshPipe(vertices, faces, smooth=state.smooth)
             self._params = params
 
-            self.parent.add_actor(self._mesh.actor)
+            self.add_actor(self._mesh.actor)
 
-        if self.parent.state.distance < 2.0:
-            angle = 180. - math.acos(self.parent.state.distance / 2.0)*r2d
+        if self._parent.state.distance < 2.0:
+            angle = 180. - math.acos(self._parent.state.distance / 2.0)*r2d
 
             opacity = min(
                 1.0,
-                max(0., (angle+5. - self.parent.state.dip) / 10.))
+                max(0., (angle+5. - self._parent.state.dip) / 10.))
         else:
             opacity = 1.0
 
@@ -115,8 +98,8 @@ class IcosphereElement(Element):
 
         if self._mesh:
             if self._depth != state.depth:
-                radius = (self.parent.planet_radius - state.depth) \
-                    / self.parent.planet_radius
+                radius = (self._parent.planet_radius - state.depth) \
+                    / self._parent.planet_radius
 
                 self._mesh.set_vertices(self._vertices * radius)
                 self._depth = state.depth
@@ -124,86 +107,86 @@ class IcosphereElement(Element):
             self._mesh.set_opacity(opacity)
             self._mesh.set_color(state.color)
 
-        self.parent.update_view()
+        self._parent.update_view()
 
-    def _get_controls(self):
+    def get_panel(self):
+        from ..state import state_bind_slider, \
+            state_bind_combobox, state_bind_checkbox, \
+            state_bind_combobox_color, state_bind_lineedit
+
         state = self._state
-        if not self._controls:
-            from ..state import state_bind_slider, \
-                state_bind_combobox, state_bind_checkbox, \
-                state_bind_combobox_color, state_bind_lineedit
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(5)
-            slider.setSingleStep(1)
-            slider.setPageStep(1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(5)
+        slider.setSingleStep(1)
+        slider.setPageStep(1)
 
-            layout.addWidget(qw.QLabel('Level'), 0, 0)
-            layout.addWidget(slider, 0, 1)
+        layout.addWidget(qw.QLabel('Level'), 0, 0)
+        layout.addWidget(slider, 0, 1)
 
-            state_bind_slider(self, state, 'level', slider, dtype=int)
+        state_bind_slider(self, state, 'level', slider, dtype=int)
 
-            cb = common.string_choices_to_combobox(IcosphereBaseChoice)
-            layout.addWidget(qw.QLabel('Base'), 1, 0)
-            layout.addWidget(cb, 1, 1)
-            state_bind_combobox(self, state, 'base', cb)
+        cb = common.string_choices_to_combobox(IcosphereBaseChoice)
+        layout.addWidget(qw.QLabel('Base'), 1, 0)
+        layout.addWidget(cb, 1, 1)
+        state_bind_combobox(self, state, 'base', cb)
 
-            cb = common.string_choices_to_combobox(IcosphereKindChoice)
-            layout.addWidget(qw.QLabel('Kind'), 2, 0)
-            layout.addWidget(cb, 2, 1)
-            state_bind_combobox(self, state, 'kind', cb)
+        cb = common.string_choices_to_combobox(IcosphereKindChoice)
+        layout.addWidget(qw.QLabel('Kind'), 2, 0)
+        layout.addWidget(cb, 2, 1)
+        state_bind_combobox(self, state, 'kind', cb)
 
-            layout.addWidget(qw.QLabel('Color'), 3, 0)
+        layout.addWidget(qw.QLabel('Color'), 3, 0)
 
-            cb = common.strings_to_combobox(
-                ['black', 'aluminium6', 'aluminium5', 'aluminium4', 'aluminium3', 'aluminium2', 'aluminium1', 'white', 'scarletred2', 'orange2', 'skyblue2', 'plum2'])
+        cb = common.strings_to_combobox([
+            'black', 'aluminium6', 'aluminium5', 'aluminium4', 'aluminium3',
+            'aluminium2', 'aluminium1', 'white', 'scarletred2', 'orange2',
+            'skyblue2', 'plum2'])
 
-            layout.addWidget(cb, 3, 1)
-            state_bind_combobox_color(
-                self, self._state, 'color', cb)
+        layout.addWidget(cb, 3, 1)
+        state_bind_combobox_color(
+            self, self._state, 'color', cb)
 
-            layout.addWidget(qw.QLabel('Opacity'), 4, 0)
+        layout.addWidget(qw.QLabel('Opacity'), 4, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(1000)
-            layout.addWidget(slider, 4, 1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(1000)
+        layout.addWidget(slider, 4, 1)
 
-            state_bind_slider(
-                self, state, 'opacity', slider, factor=0.001)
+        state_bind_slider(
+            self, state, 'opacity', slider, factor=0.001)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 5, 0)
-            state_bind_checkbox(self, state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 5, 0)
+        state_bind_checkbox(self, state, 'visible', cb)
 
-            cb = qw.QCheckBox('Smooth')
-            layout.addWidget(cb, 5, 1)
-            state_bind_checkbox(self, state, 'smooth', cb)
+        cb = qw.QCheckBox('Smooth')
+        layout.addWidget(cb, 5, 1)
+        state_bind_checkbox(self, state, 'smooth', cb)
 
-            layout.addWidget(qw.QLabel('Depth [km]'), 6, 0)
-            le = qw.QLineEdit()
-            layout.addWidget(le, 6, 1)
-            state_bind_lineedit(
-                self, state, 'depth', le,
-                from_string=lambda s: float(s)*1000.,
-                to_string=lambda v: str(v/1000.))
+        layout.addWidget(qw.QLabel('Depth [km]'), 6, 0)
+        le = qw.QLineEdit()
+        layout.addWidget(le, 6, 1)
+        state_bind_lineedit(
+            self, state, 'depth', le,
+            from_string=lambda s: float(s)*1000.,
+            to_string=lambda v: str(v/1000.))
 
-            layout.addWidget(qw.QFrame(), 7, 0, 1, 2)
+        layout.addWidget(qw.QFrame(), 7, 0, 1, 2)
 
-        self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

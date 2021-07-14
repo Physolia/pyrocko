@@ -78,46 +78,30 @@ class LatLonGrid(object):
             self.prop.SetDiffuseColor(color.rgb)
             self._color = color
 
+
 class GridState(ElementState):
     visible = Bool.T(default=True)
     color = Color.T(default=Color.D('white'))
 
     def create(self):
-        element = GridElement()
-        return element
+        return GridElement()
 
 
 class GridElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self.parent = None
-        self._controls = None
         self._grid = None
         self._stepsizes = self.get_stepsizes(10.)
 
     def get_name(self):
         return 'Grid'
 
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        upd = self.update
-        self._listeners.append(upd)
-        state.add_listener(upd, 'visible')
-        state.add_listener(upd, 'color')
+    def get_state_listeners(self):
+        return [(self.update, ['visible', 'color'])]
 
-    def set_parent(self, parent):
-        self.parent = parent
-        self.parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        upd = self.update
-        self._listeners.append(upd)
-        self.parent.state.add_listener(upd, 'distance')
-        self.parent.state.add_listener(upd, 'lat')
-        self.parent.state.add_listener(upd, 'lon')
-
-        self.update()
+    def get_parent_state_listeners(self):
+        return [(self.update, ['distance', 'lat', 'lon'])]
 
     def get_stepsizes(self, distance):
         factor = 10.
@@ -127,51 +111,48 @@ class GridElement(Element):
 
     def update(self, *args):
         state = self._state
-        pstate = self.parent.state
+        pstate = self._parent.state
 
         stepsizes = self.get_stepsizes(pstate.distance)
         if self._grid:
-            self.parent.remove_actor(self._grid.actor)
+            self.remove_actor(self._grid.actor)
             self._grid = None
 
         if state.visible and not self._grid:
             delta = pstate.distance * r2d * 0.5
             self._grid = LatLonGrid(
                 1.0, stepsizes[0], stepsizes[1], pstate.lat, pstate.lon, delta)
-            self.parent.add_actor(self._grid.actor)
+            self.add_actor(self._grid.actor)
 
-        if self._grid:
+        if self._grid is not None:
             self._grid.set_color(state.color)
 
-        self.parent.update_view()
+        self._parent.update_view()
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import state_bind_checkbox, state_bind_combobox_color
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_combobox_color
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            # color
+        # color
 
-            layout.addWidget(qw.QLabel('Color'), 0, 0)
+        layout.addWidget(qw.QLabel('Color'), 0, 0)
 
-            cb = common.strings_to_combobox(
-                ['black', 'white'])
+        cb = common.strings_to_combobox(
+            ['black', 'white'])
 
-            layout.addWidget(cb, 0, 1)
-            state_bind_combobox_color(self, self._state, 'color', cb)
+        layout.addWidget(cb, 0, 1)
+        state_bind_combobox_color(self, self._state, 'color', cb)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 1, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 1, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            layout.addWidget(qw.QFrame(), 2, 0)
+        layout.addWidget(qw.QFrame(), 2, 0)
 
-        self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

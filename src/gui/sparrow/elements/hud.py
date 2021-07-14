@@ -32,8 +32,7 @@ class HudState(ElementState):
     fontsize = Float.T(default=0.05)
 
     def create(self):
-        element = HudElement()
-        return element
+        return HudElement()
 
 
 def none_or(f):
@@ -70,61 +69,21 @@ class HudElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._controls = None
-        self._actor = None
+        self._text_actor = None
         self._listeners2 = []
 
     def get_name(self):
         return 'HUD'
 
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        self._listeners.append(
-            state.add_listener(self.update, 'visible'))
+    def get_state_listeners(self):
+        return [
+            (self.update, [
+                'visible', 'lightness', 'fontsize', 'template', 'position']),
+            (self.update_bindings, [
+                'variables'])]
 
-        self._listeners.append(
-            state.add_listener(self.update, 'lightness'))
-
-        self._listeners.append(
-            state.add_listener(self.update, 'fontsize'))
-
-        self._listeners.append(
-            state.add_listener(self.update, 'template'))
-
-        self._listeners.append(
-            state.add_listener(self.update, 'position'))
-
-        self._listeners.append(
-            state.add_listener(self.update_bindings, 'variables'))
-
-    def unbind_state(self):
-        self._listeners.clear()
-        self._listeners2.clear()
-        self._state = None
-
-    def set_parent(self, parent):
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-
-        self._listeners.append(
-            self._parent.gui_state.add_listener(self.update, 'size'))
-
-        self.update_bindings()
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._parent:
-            if self._actor is not None:
-                self._parent.remove_actor_2d(self._actor)
-
-            if self._controls is not None:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
+    def get_parent_state_listeners(self):
+        return [(self.update, ['size'])]
 
     def update_bindings(self, *args):
         while self._listeners2:
@@ -141,10 +100,10 @@ class HudElement(Element):
             return
         pstate = self._parent.state
 
-        if self._actor is None:
-            self._actor = vtk.vtkTextActor()
+        if self._text_actor is None:
+            self._text_actor = vtk.vtkTextActor()
 
-        actor = self._actor
+        actor = self._text_actor
 
         vs = [
             get_elements(pstate, variable)[0]
@@ -167,7 +126,6 @@ class HudElement(Element):
         x, y, hj, vj = pos[state.position]
 
         actor.SetPosition(x, y)
-        # actor.SetPosition2(200, 100)
         prop = actor.GetTextProperty()
         prop.SetFontSize(int(round(state.fontsize*sy)))
 
@@ -177,66 +135,63 @@ class HudElement(Element):
         prop.SetVerticalJustification(vj)
 
         if state.visible:
-            self._parent.add_actor_2d(actor)
+            self.add_actor_2d(actor)
         else:
-            self._parent.remove_actor_2d(actor)
+            self.remove_actor_2d(actor)
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import state_bind_checkbox, state_bind_lineedit, \
-                state_bind_combobox, state_bind_slider
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_lineedit, \
+            state_bind_combobox, state_bind_slider
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            layout.addWidget(qw.QLabel('Template'), 0, 0)
-            le = qw.QLineEdit()
-            layout.addWidget(le, 0, 1)
-            state_bind_lineedit(self, self._state, 'template', le)
+        layout.addWidget(qw.QLabel('Template'), 0, 0)
+        le = qw.QLineEdit()
+        layout.addWidget(le, 0, 1)
+        state_bind_lineedit(self, self._state, 'template', le)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 1, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 1, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            cb = common.string_choices_to_combobox(HudPositionChoice)
-            layout.addWidget(qw.QLabel('Position'), 2, 0)
-            layout.addWidget(cb, 2, 1)
-            state_bind_combobox(self, self._state, 'position', cb)
+        cb = common.string_choices_to_combobox(HudPositionChoice)
+        layout.addWidget(qw.QLabel('Position'), 2, 0)
+        layout.addWidget(cb, 2, 1)
+        state_bind_combobox(self, self._state, 'position', cb)
 
-            layout.addWidget(qw.QLabel('Lightness'), 3, 0)
+        layout.addWidget(qw.QLabel('Lightness'), 3, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(1000)
-            layout.addWidget(slider, 3, 1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(1000)
+        layout.addWidget(slider, 3, 1)
 
-            state_bind_slider(
-                self, self._state, 'lightness', slider, factor=0.001)
+        state_bind_slider(
+            self, self._state, 'lightness', slider, factor=0.001)
 
-            layout.addWidget(qw.QLabel('Fontsize'), 4, 0)
+        layout.addWidget(qw.QLabel('Fontsize'), 4, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(1000)
-            layout.addWidget(slider, 4, 1)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(1000)
+        layout.addWidget(slider, 4, 1)
 
-            state_bind_slider(
-                self, self._state, 'fontsize', slider, factor=0.001)
+        state_bind_slider(
+            self, self._state, 'fontsize', slider, factor=0.001)
 
-            layout.addWidget(qw.QFrame(), 5, 0)
+        layout.addWidget(qw.QFrame(), 5, 0)
 
-        self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

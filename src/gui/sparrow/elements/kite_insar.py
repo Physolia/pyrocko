@@ -55,8 +55,7 @@ class KiteState(ElementState):
     scenes = List.T(KiteSceneElement.T(), default=[])
 
     def create(self):
-        element = KiteElement()
-        return element
+        return KiteElement()
 
     def add_scene(self, scene):
         self.scenes.append(scene)
@@ -70,18 +69,14 @@ class KiteElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._controls = None
         self._meshes = {}
-
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        self._listeners.append(
-            state.add_listener(self.update, 'visible'))
-        self._listeners.append(
-            state.add_listener(self.update, 'scenes'))
 
     def get_name(self):
         return 'Kite InSAR Scenes'
+
+    def get_state_listeners(self):
+        return [
+            (self.update, ['visible', 'scenes'])]
 
     def set_parent(self, parent):
         if not Scene:
@@ -90,10 +85,7 @@ class KiteElement(Element):
                 'Software package Kite is needed to display InSAR scenes!')
             return
 
-        self._parent = parent
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
+        Element.set_parent(self, parent)
 
     def open_load_scene_dialog(self, *args):
         caption = 'Select one or more Kite scenes to open'
@@ -138,31 +130,28 @@ class KiteElement(Element):
                 mesh = self._meshes[scene_element]
                 mesh.set_shading('phong')
                 if scene_element.visible:
-                    self._parent.add_actor(mesh.actor)
+                    self.add_actor(mesh.actor)
                 else:
-                    self._parent.remove_actor(mesh.actor)
+                    self.remove_actor(mesh.actor)
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if not self._controls:
-            from ..state import state_bind_checkbox
+    def get_panel(self):
+        from ..state import state_bind_checkbox
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        frame.setLayout(layout)
 
-            pb_load = qw.QPushButton('Add Scene')
-            pb_load.clicked.connect(self.open_load_scene_dialog)
-            layout.addWidget(pb_load, 0, 0)
+        pb_load = qw.QPushButton('Add Scene')
+        pb_load.clicked.connect(self.open_load_scene_dialog)
+        layout.addWidget(pb_load, 0, 0)
 
-            cb = qw.QCheckBox('Show')
-            layout.addWidget(cb, 1, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        cb = qw.QCheckBox('Show')
+        layout.addWidget(cb, 1, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [

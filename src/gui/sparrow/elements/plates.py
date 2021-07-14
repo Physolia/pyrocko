@@ -64,8 +64,7 @@ class PlatesBoundsState(ElementState):
     lines = Bool.T(default=True)
 
     def create(self):
-        element = PlatesBoundsElement()
-        return element
+        return PlatesBoundsElement()
 
 
 class PlatelinesPipe(object):
@@ -108,106 +107,73 @@ class PlatesBoundsElement(Element):
 
     def __init__(self):
         Element.__init__(self)
-        self._parent = None
-        self._state = None
         self._pipe = None
-        self._controls = None
         self._plates = None
-        self._listeners = []
         self._plate_line = None
         self._plate_lines = []
-
-    def bind_state(self, state):
-        Element.bind_state(self, state)
-        self._listeners.append(
-            state.add_listener(self.update, 'visible'))
-        self._listeners.append(
-            state.add_listener(self.update, 'opacity'))
-
-    def unbind_state(self):
-        self._listerners = []
 
     def get_name(self):
         return 'Plate bounds'
 
+    def get_state_listeners(self):
+        return [(self.update, ['visible', 'opacity'])]
+
     def set_parent(self, parent):
-        self._parent = parent
         if not self._plates:
-            PB = PeterBird2003()
-            self._plates = PB.get_plates()
+            self._plates = PeterBird2003().get_plates()
 
-        self._parent.add_panel(
-            self.get_name(), self._get_controls(), visible=True)
-        self.update()
-
-    def unset_parent(self):
-        self.unbind_state()
-        if self._plate_lines:
-            for i, plate in enumerate(self._plate_lines):
-                self._parent.remove_actor(plate.actor)
-
-            self._pipe = None
-
-            if self._controls:
-                self._parent.remove_panel(self._controls)
-                self._controls = None
-
-            self._parent.update_view()
-            self._parent = None
+        Element.set_parent(self, parent)
 
     def update(self, *args):
-
         state = self._state
         if state.visible:
             colors = plates_to_color(self._plates)
             for i, plate in enumerate(self._plates):
                 self._plate_line = PlatelinesPipe(plates=plate)
                 self._plate_line.plate_to_lines(plate)
-                self._parent.add_actor(self._plate_line.actor)
+                self.add_actor(self._plate_line.actor)
                 prop = self._plate_line.actor.GetProperty()
                 prop.SetDiffuseColor(colors[i][0:3])
                 self._plate_line.set_opacity(state.opacity)
                 self._plate_lines.append(self._plate_line)
+
         if not state.visible and self._plate_lines:
             for i, plate in enumerate(self._plate_lines):
-                self._parent.remove_actor(plate.actor)
+                self.remove_actor(plate.actor)
 
         self._parent.update_view()
 
-    def _get_controls(self):
-        if self._controls is None:
-            from ..state import state_bind_checkbox, state_bind_slider
+    def get_panel(self):
+        from ..state import state_bind_checkbox, state_bind_slider
 
-            frame = qw.QFrame()
-            layout = qw.QGridLayout()
-            layout.setAlignment(qc.Qt.AlignTop)
-            frame.setLayout(layout)
+        frame = qw.QFrame()
+        layout = qw.QGridLayout()
+        layout.setAlignment(qc.Qt.AlignTop)
+        frame.setLayout(layout)
 
-            layout.addWidget(qw.QLabel('Opacity'), 0, 0)
+        layout.addWidget(qw.QLabel('Opacity'), 0, 0)
 
-            slider = qw.QSlider(qc.Qt.Horizontal)
-            slider.setSizePolicy(
-                qw.QSizePolicy(
-                    qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
-            slider.setMinimum(0)
-            slider.setMaximum(10)
-            slider.setSingleStep(0.5)
-            slider.setPageStep(1)
-            layout.addWidget(slider, 0, 1)
-            state_bind_slider(self, self._state, 'opacity', slider)
+        slider = qw.QSlider(qc.Qt.Horizontal)
+        slider.setSizePolicy(
+            qw.QSizePolicy(
+                qw.QSizePolicy.Expanding, qw.QSizePolicy.Fixed))
+        slider.setMinimum(0)
+        slider.setMaximum(10)
+        slider.setSingleStep(0.5)
+        slider.setPageStep(1)
+        layout.addWidget(slider, 0, 1)
+        state_bind_slider(self, self._state, 'opacity', slider)
 
-            cb = qw.QCheckBox('Show')
+        cb = qw.QCheckBox('Show')
 
-            layout.addWidget(cb, 1, 0)
-            state_bind_checkbox(self, self._state, 'visible', cb)
+        layout.addWidget(cb, 1, 0)
+        state_bind_checkbox(self, self._state, 'visible', cb)
 
-            pb = qw.QPushButton('Remove')
-            layout.addWidget(pb, 1, 1)
-            pb.clicked.connect(self.remove)
+        pb = qw.QPushButton('Remove')
+        layout.addWidget(pb, 1, 1)
+        pb.clicked.connect(self.remove)
 
-            self._controls = frame
-
-        return self._controls
+        return frame
 
 
 __all__ = [
