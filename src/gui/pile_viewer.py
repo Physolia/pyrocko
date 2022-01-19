@@ -3368,7 +3368,7 @@ def MakePileViewerMainClass(base):
                     p.setPen(primary_pen)
 
                     if self.menuitem_cliptraces.isChecked():
-                        p.setClipRect(0, 0, w, h)
+                        p.setClipRect(0, 0, int(w), int(h))
 
             if self.floating_marker:
                 self.floating_marker.draw(
@@ -3942,10 +3942,10 @@ def MakePileViewerMainClass(base):
                     max(working_system_time_range[0], tmin),
                     min(working_system_time_range[1], tmax))
 
-                p1 = self.mapToGlobal(qc.QPoint(x0, 0))
+                p1 = self.mapToGlobal(qc.QPoint(int(round(x0)), 0))
 
                 self.picking.setGeometry(
-                    p1.x(), p1.y(), max(w, 1), self.height())
+                    p1.x(), p1.y(), int(round(max(w, 1))), self.height())
 
                 ftrack = self.track_to_screen.rev(y)
                 nslc_ids = self.get_nslc_ids_for_track(ftrack)
