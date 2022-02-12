@@ -20,7 +20,7 @@ from pyrocko.progress import progress
 
 from . import model, io, cache, dataset
 
-from .model import to_kind_id, separator, WaveformOrder
+from .model import to_kind_id, WaveformOrder, to_kind
 from .client import fdsn, catalog
 from .selection import Selection, filldocs
 from .database import abspath
@@ -43,22 +43,18 @@ def lpick(condition, seq):
     return ft
 
 
-def codes_fill(n, codes):
-    return codes[:n] + ('*',) * (n-len(codes))
-
-
 c_kind_to_ncodes = {
-    'station': 4,
-    'channel': 6,
-    'response': 6,
-    'waveform': 6,
+    'station': 3,
+    'channel': 5,
+    'response': 5,
+    'waveform': 5,
     'event': 1,
-    'waveform_promise': 6,
+    'waveform_promise': 5,
     'undefined': 1}
 
 
-c_inflated = ['', '*', '*', '*', '*', '*']
-c_offsets = [0, 2, 1, 1, 1, 1, 0]
+c_inflated = ['*', '*', '*', '*', '*']
+c_offsets = [0, 1, 1, 1, 1, 1, 0]
 
 
 def codes_inflate(codes):
@@ -126,7 +122,7 @@ def pyrocko_station_from_channel_group(group, extra_args):
 
 
 def blocks(tmin, tmax, deltat, nsamples_block=100000):
-    tblock = deltat * nsamples_block
+    tblock = util.to_time_float(deltat * nsamples_block)
     iblock_min = int(math.floor(tmin / tblock))
     iblock_max = int(math.ceil(tmax / tblock))
     for iblock in range(iblock_min, iblock_max):
@@ -281,7 +277,6 @@ class Squirrel(Selection):
         ~Squirrel.iter_kinds
         ~Squirrel.iter_deltats
         ~Squirrel.iter_codes
-        ~Squirrel.iter_counts
         ~pyrocko.squirrel.selection.Selection.get_paths
         ~Squirrel.get_nuts
         ~Squirrel.get_kinds
@@ -723,7 +718,7 @@ class Squirrel(Selection):
                 file_segment=itr,
                 file_element=0,
                 file_mtime=0,
-                codes=separator.join(tr.codes),
+                codes=tr.codes,
                 tmin_seconds=tmin_seconds,
                 tmin_offset=tmin_offset,
                 tmax_seconds=tmax_seconds,
@@ -990,7 +985,7 @@ class Squirrel(Selection):
                 cond.append(
                     ' ( %s ) ' % ' OR '.join(
                         ('kind_codes.codes GLOB ?',) * len(pats)))
-                args.extend(separator.join(pat) for pat in pats)
+                args.extend(str(pat) for pat in pats)
 
         if kind_codes_ids is not None:
             cond.append(
@@ -1094,7 +1089,7 @@ class Squirrel(Selection):
                         cond.append(
                             ' ( %s ) ' % ' OR '.join(
                                 ('kind_codes.codes GLOB ?',) * len(pats)))
-                        args.extend(separator.join(pat) for pat in pats)
+                        args.extend(str(pat) for pat in pats)
 
                 if path is not None:
                     cond.append('files.path == ?')
@@ -1321,7 +1316,7 @@ class Squirrel(Selection):
             kind=kind,
             kind_codes_count='%(db)s.%(kind_codes_count)s' % self._names)
 
-    def iter_counts(self, kind=None):
+    def _iter_codes_info(self, kind=None):
         '''
         Iterate over number of occurrences of any (kind, codes) combination.
 
@@ -1331,12 +1326,12 @@ class Squirrel(Selection):
             str
 
         :yields:
-            Tuples of the form ``((kind, codes), count)``.
+            Tuples of the form ``(kind, codes, deltat, kind_codes_id, count)``.
 
         :complexity:
             O(1), independent of number of nuts.
         '''
-        return self._database._iter_counts(
+        return self._database._iter_codes_info(
             kind=kind,
             kind_codes_count='%(db)s.%(kind_codes_count)s' % self._names)
 
@@ -1406,11 +1401,11 @@ class Squirrel(Selection):
             if kind is not ``None``
         '''
         d = {}
-        for (k, codes, deltat), count in self.iter_counts():
-            if k not in d:
-                v = d[k] = {}
+        for kind_id, codes, _, _, count in self._iter_codes_info(kind=kind):
+            if kind_id not in d:
+                v = d[kind_id] = {}
             else:
-                v = d[k]
+                v = d[kind_id]
 
             if codes not in v:
                 v[codes] = 0
@@ -1418,9 +1413,9 @@ class Squirrel(Selection):
             v[codes] += count
 
         if kind is not None:
-            return d[kind]
+            return d[to_kind_id(kind)]
         else:
-            return d
+            return dict((to_kind(kind_id), v) for (kind_id, v) in d.items())
 
     def glob_codes(self, kind, codes_list):
         '''
@@ -1450,7 +1445,7 @@ class Squirrel(Selection):
             codes_cond = 'AND ( %s ) ' % ' OR '.join(
                     ('kind_codes.codes GLOB ?',) * len(pats))
 
-            args.extend(separator.join(pat) for pat in pats)
+            args.extend(str(pat) for pat in pats)
         else:
             codes_cond = ''
 
@@ -1692,8 +1687,7 @@ class Squirrel(Selection):
         for codes, group in d.items():
             if len(group) > 1:
                 logger.warning(
-                    'Multiple entries matching codes: %s'
-                    % '.'.join(codes.split(separator)))
+                    'Multiple entries matching codes: %s' % str(codes))
 
     @filldocs
     def get_stations(
@@ -1886,7 +1880,7 @@ class Squirrel(Selection):
                 orders.append(
                     WaveformOrder(
                         source_id=promise.file_path,
-                        codes=tuple(promise.codes.split(separator)),
+                        codes=promise.codes,
                         tmin=block_tmin,
                         tmax=block_tmax,
                         deltat=promise.deltat,
@@ -2402,7 +2396,7 @@ class Squirrel(Selection):
 
             by_c = defaultdict(list)
             for ch in channels_list:
-                by_c[ch.channel].append(ch._get_pyrocko_channel_args())
+                by_c[ch.codes.channel].append(ch._get_pyrocko_channel_args())
 
             chas = list(by_c.keys())
             chas.sort()
@@ -2518,16 +2512,20 @@ class Squirrel(Selection):
         tmax_seconds, tmax_offset = model.tsplit(tmax)
         kind_id = to_kind_id(kind)
 
-        if codes_list is None:
-            codes_list = self.get_codes(kind=kind)
+        codes_info = list(self._iter_codes_info(kind=kind))
 
         kdata_all = []
-        for pattern in codes_list:
-            kdata = self.glob_codes(kind, [pattern])
-            for row in kdata:
-                row[0:0] = [pattern]
+        if codes_list is None:
+            for _, codes, deltat, kind_codes_id, _ in codes_info:
+                kdata_all.append((codes, kind_codes_id, codes, deltat))
 
-            kdata_all.extend(kdata)
+        else:
+            for pattern in codes_list:
+                pattern = model.to_codes(kind_id, pattern)
+                for _, codes, deltat, kind_codes_id, _ in codes_info:
+                    if model.match_codes(pattern, codes):
+                        kdata_all.append(
+                            (pattern, kind_codes_id, codes, deltat))
 
         kind_codes_ids = [x[1] for x in kdata_all]
 
@@ -2632,9 +2630,7 @@ class Squirrel(Selection):
         self._operators.append(op)
 
     def update_operator_mappings(self):
-        available = [
-            separator.join(codes)
-            for codes in self.get_codes(kind=('channel'))]
+        available = self.get_codes(kind=('channel'))
 
         for operator in self._operators:
             operator.update_mappings(available, self._operator_registry)
@@ -2648,16 +2644,12 @@ class Squirrel(Selection):
         return list(self.iter_operator_mappings())
 
     def get_operator(self, codes):
-        if isinstance(codes, tuple):
-            codes = separator.join(codes)
         try:
             return self._operator_registry[codes][0]
         except KeyError:
             return None
 
     def get_operator_group(self, codes):
-        if isinstance(codes, tuple):
-            codes = separator.join(codes)
         try:
             return self._operator_registry[codes]
         except KeyError:
@@ -2666,7 +2658,7 @@ class Squirrel(Selection):
     def iter_operator_codes(self):
         for _, _, out_codes in self.iter_operator_mappings():
             for codes in out_codes:
-                yield tuple(codes.split(separator))
+                yield codes
 
     def get_operator_codes(self):
         return list(self.iter_operator_codes())

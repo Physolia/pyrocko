@@ -3,6 +3,8 @@ from __future__ import print_function, absolute_import
 import time
 import random
 import os
+import copy
+import pickle
 import unittest
 import tempfile
 import shutil
@@ -51,6 +53,54 @@ class SquirrelTestCase(unittest.TestCase):
         for d in cls.tempdirs:
             shutil.rmtree(d)
 
+    def test_nslce_codes(self):
+
+        C = squirrel.CodesNSLCE
+
+        for invalid in [
+                '', 'sta', 'net.sta', 'net.sta.loc',
+                'net.sta.loc.cha.ext.ext']:
+
+            with self.assertRaises(squirrel.CodesError):
+                C(invalid)
+
+        for invalid in [
+                ('n.n', 's', 'l', 'c'),
+                ('n.n', 's', 'l', 'c', 'e')]:
+
+            with self.assertRaises(squirrel.CodesError):
+                C(*invalid)
+
+        for valid in [
+                'net.sta.loc.cha',
+                '...',
+                'net.sta.loc.cha.ext']:
+
+            c = C(valid)
+            assert (c.network, c.station, c.location, c.channel, c.extra) \
+                == c.as_tuple()
+
+            assert str(c) == valid
+            assert C(valid) is C(*c.as_tuple())
+            assert C(valid) == C(*c.as_tuple())
+            assert C(valid) is C(**c.as_dict())
+            assert C(valid) == C(**c.as_dict())
+            d1 = c.replace(station='sta2')
+            d2 = C(c.network, 'sta2', c.location, c.channel, c.extra)
+            assert d1 is d2
+            assert d1 == d2
+            assert d1 is copy.deepcopy(d2)
+            assert d1 is copy.copy(d2)
+            assert d1 is pickle.loads(pickle.dumps(d2))
+
+        sta = squirrel.Channel(
+            codes='net.sta.loc.cha',
+            lat=11.,
+            lon=12.,
+            depth=1000.)
+
+        assert sta.codes is C('net.sta.loc.cha')
+
     def test_detect(self):
         for (fn, format) in SquirrelTestCase.test_files:
             fpath = common.test_data_file(fn)
@@ -73,7 +123,6 @@ class SquirrelTestCase(unittest.TestCase):
             for nut in squirrel.iload(fpath, content=[]):
                 ii += 1
 
-        print(ii)
         assert ii == 425
 
         ii = 0
@@ -264,7 +313,7 @@ class SquirrelTestCase(unittest.TestCase):
             assert sq.get_nnuts() == 2
 
             assert sorted(sq.get_codes()) == [
-                ('', '', '00', '', '', ''), ('', '', '01', '', '', '')]
+                ('', '00', '', '', ''), ('', '01', '', '', '')]
             assert list(sq.iter_kinds()) == ['waveform']
 
             assert len(sq.get_nuts('waveform', tmin=-10., tmax=10.)) == 2
@@ -281,7 +330,7 @@ class SquirrelTestCase(unittest.TestCase):
             assert sq.get_nnuts() == 2
 
             assert sorted(sq.get_codes()) == [
-                ('', '', '00', '', '', ''), ('', '', '01', '', '', '')]
+                ('', '00', '', '', ''), ('', '01', '', '', '')]
             assert list(sq.iter_kinds()) == ['waveform']
 
             assert len(sq.get_nuts('waveform', tmin=0., tmax=1.)) == 0
@@ -427,7 +476,7 @@ class SquirrelTestCase(unittest.TestCase):
                     file_format='virtual',
                     file_segment=0,
                     file_element=file_element,
-                    codes='c%02i' % file_element,
+                    codes=squirrel.CodesX('c%02i' % file_element),
                     tmin_seconds=tmin_seconds,
                     tmin_offset=tmin_offset,
                     tmax_seconds=tmax_seconds,
@@ -571,7 +620,7 @@ class SquirrelTestCase(unittest.TestCase):
                 for qtmin, qtmax in iter_qtranges():
 
                     entries = sq.get_coverage(
-                        'waveform', tmin=qtmin, tmax=qtmax, codes_list=['*'])
+                        'waveform', tmin=qtmin, tmax=qtmax)
 
                     if deci == 1:
                         assert len(entries) == 4
@@ -580,7 +629,7 @@ class SquirrelTestCase(unittest.TestCase):
                         assert len(entries) == 8
 
                     for entry in entries:
-                        k = entry[1].split(squirrel.separator)[2], entry[2]
+                        k = entry[1], entry[2]
                         data = entry[-1]
                         if k not in cover_ref:
                             cover_ref[k] = data
@@ -618,7 +667,7 @@ class SquirrelTestCase(unittest.TestCase):
 
         assert 2 == len(
             sq.get_coverage(
-                'waveform', tmin, tmin + 3*d, codes_list=['*'])[0][5])
+                'waveform', tmin, tmin + 3*d)[0][5])
 
     def test_loading(self, with_pile=False, hours=1):
         dir = op.join(tempfile.gettempdir(), 'testdataset_d_%i' % hours)
@@ -953,7 +1002,6 @@ class SquirrelTestCase(unittest.TestCase):
         assert sq.pile.get_tmax() is not None
 
         assert list(sq.pile.networks) == ['']
-        assert list(sq.pile.networks) == ['']
         assert list(sq.pile.stations) == ['LGG01']
         assert list(sq.pile.locations) == ['']
         assert list(sq.pile.channels) == ['BHZ']
@@ -1057,7 +1105,6 @@ class SquirrelTestCase(unittest.TestCase):
         sq = squirrel.Squirrel(database=database)
         handle = sq.add_volatile_waveforms(traces)
         for tr in sq.get_waveforms(include_last=True):
-            print(tr)
             assert tr.tmin == tmin and tr.tmax == tmax
 
         sq.remove(handle)

@@ -18,26 +18,304 @@ promises, data coverage and sensor information.
 
 from __future__ import absolute_import, print_function
 
+import re
+import fnmatch
 import hashlib
 import numpy as num
 from os import urandom
 from base64 import urlsafe_b64encode
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 from pyrocko import util
-from pyrocko.guts import Object, String, Timestamp, Float, Int, Unicode, \
-    Tuple, List, StringChoice, Any
-from pyrocko.model import Content
+from pyrocko.guts import Object, SObject, String, Timestamp, Float, Int, \
+    Unicode, Tuple, List, StringChoice, Any
+from pyrocko.model import squirrel_content
 from pyrocko.response import FrequencyResponse, MultiplyResponse, \
     IntegrationResponse, DifferentiationResponse, simplify_responses, \
     FrequencyResponseCheckpoint
 
-from .error import ConversionError
+from .error import ConversionError, SquirrelError
 
 
 guts_prefix = 'squirrel'
 
-separator = '\t'
+
+g_codes_pool = {}
+
+
+class CodesError(SquirrelError):
+    pass
+
+
+def normalize_nslce(*args, **kwargs):
+    if args and kwargs:
+        raise ValueError('Either *args or **kwargs accepted, not both.')
+
+    if len(args) == 1:
+        if isinstance(args[0], str):
+            args = tuple(args[0].split('.'))
+        elif isinstance(args[0], tuple):
+            args = args[0]
+        else:
+            raise ValueError('Invalid argument type: %s' % type(args[0]))
+
+    nargs = len(args)
+    if nargs == 5:
+        t = args
+
+    elif nargs == 4:
+        t = args + ('',)
+
+    elif nargs == 0:
+        d = dict(
+            network='',
+            station='',
+            location='',
+            channel='',
+            extra='')
+
+        d.update(kwargs)
+        t = tuple(kwargs.get(k, '') for k in (
+            'network', 'station', 'location', 'channel', 'extra'))
+
+    else:
+        raise CodesError(
+            'Does not match NSLC or NSLCE codes pattern: %s' % '.'.join(args))
+
+    if '.'.join(t).count('.') != 4:
+        raise CodesError(
+            'Codes may not contain a ".": "%s", "%s", "%s", "%s", "%s"' % t)
+
+    return t
+
+
+CodesNSLCEBase = namedtuple(
+    'CodesNSLCEBase', [
+        'network', 'station', 'location', 'channel', 'extra'])
+
+
+class CodesNSLCE(CodesNSLCEBase, SObject):
+    '''
+    Codes denominating a seismic channel (NSLC or NSLCE).
+
+    FDSN/SEED style NET.STA.LOC.CHA is accepted or NET.STA.LOC.CHA.EXTRA, where
+    the EXTRA part in the latter form can be used to identify a custom
+    processing applied to a channel.
+    '''
+
+    __slots__ = ()
+    __hash__ = CodesNSLCEBase.__hash__
+
+    as_dict = CodesNSLCEBase._asdict
+
+    def __new__(cls, *args, safe_str=None, **kwargs):
+        if len(args) == 1 and isinstance(args[0], CodesNSLCE):
+            return args[0]
+        elif safe_str is not None:
+            t = safe_str.split('.')
+        else:
+            t = normalize_nslce(*args, **kwargs)
+
+        x = CodesNSLCEBase.__new__(cls, *t)
+        return g_codes_pool.setdefault(x, x)
+
+    def __init__(self, *args, **kwargs):
+        SObject.__init__(self)
+
+    def __str__(self):
+        if self.extra == '':
+            return '.'.join(self[:-1])
+        else:
+            return '.'.join(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, CodesNSLCE):
+            other = CodesNSLCE(other)
+
+        return CodesNSLCEBase.__eq__(self, other)
+
+    @property
+    def safe_str(self):
+        return '.'.join(self)
+
+    @property
+    def nslc(self):
+        return self[:4]
+
+    @property
+    def nsl(self):
+        return self[:3]
+
+    @property
+    def ns(self):
+        return self[:2]
+
+    def as_tuple(self):
+        return tuple(self)
+
+    def replace(self, **kwargs):
+        x = CodesNSLCEBase._replace(self, **kwargs)
+        return g_codes_pool.setdefault(x, x)
+
+
+def normalize_nsl(*args, **kwargs):
+    if args and kwargs:
+        raise ValueError('Either *args or **kwargs accepted, not both.')
+
+    if len(args) == 1:
+        if isinstance(args[0], str):
+            args = tuple(args[0].split('.'))
+        elif isinstance(args[0], tuple):
+            args = args[0]
+        else:
+            raise ValueError('Invalid argument type: %s' % type(args[0]))
+
+    nargs = len(args)
+    if nargs == 3:
+        t = args
+
+    elif nargs == 0:
+        d = dict(
+            network='',
+            station='',
+            location='')
+
+        d.update(kwargs)
+        t = tuple(kwargs.get(k, '') for k in (
+            'network', 'station', 'location'))
+
+    else:
+        raise CodesError(
+            'Does not match NSL codes pattern: %s' % '.'.join(args))
+
+    if '.'.join(t).count('.') != 2:
+        raise CodesError(
+            'Codes may not contain a ".": "%s", "%s", "%s"' % t)
+
+    return t
+
+
+CodesNSLBase = namedtuple(
+    'CodesNSLBase', [
+        'network', 'station', 'location'])
+
+
+class CodesNSL(CodesNSLBase, SObject):
+    '''
+    Codes denominating a seismic station (NSL).
+
+    NET.STA.LOC is accepted, slightly different from SEED/StationXML, where
+    LOC is part of the channel. By setting location='*' is possible to get
+    compatible behaviour in most cases.
+    '''
+
+    __slots__ = ()
+    __hash__ = CodesNSLBase.__hash__
+
+    as_dict = CodesNSLBase._asdict
+
+    def __new__(cls, *args, safe_str=None, **kwargs):
+        if len(args) == 1 and isinstance(args[0], CodesNSL):
+            return args[0]
+        elif safe_str is not None:
+            t = safe_str.split('.')
+        else:
+            t = normalize_nsl(*args, **kwargs)
+
+        x = CodesNSLBase.__new__(cls, *t)
+        return g_codes_pool.setdefault(x, x)
+
+    def __init__(self, *args, **kwargs):
+        SObject.__init__(self)
+
+    def __str__(self):
+        return '.'.join(self)
+
+    def __eq__(self, other):
+        if not isinstance(other, CodesNSL):
+            other = CodesNSL(other)
+
+        return CodesNSLBase.__eq__(self, other)
+
+    @property
+    def safe_str(self):
+        return '.'.join(self)
+
+    @property
+    def ns(self):
+        return self[:2]
+
+    def as_tuple(self):
+        return tuple(self)
+
+    def replace(self, **kwargs):
+        x = CodesNSLBase._replace(self, **kwargs)
+        return g_codes_pool.setdefault(x, x)
+
+
+CodesXBase = namedtuple(
+    'CodesXBase', [
+        'name'])
+
+
+class CodesX(CodesXBase, SObject):
+    '''
+    General purpose codes for anything other than channels or stations.
+    '''
+
+    __slots__ = ()
+    __hash__ = CodesXBase.__hash__
+    __eq__ = CodesXBase.__eq__
+
+    as_dict = CodesXBase._asdict
+
+    def __new__(cls, name='', safe_str=None):
+        if isinstance(name, CodesX):
+            return name
+        elif safe_str is not None:
+            name = safe_str
+        else:
+            if '.' in name:
+                raise CodesError('Code may not contain a ".": %s' % name)
+
+        x = CodesXBase.__new__(cls, name)
+        return g_codes_pool.setdefault(x, x)
+
+    def __init__(self, *args, **kwargs):
+        SObject.__init__(self)
+
+    def __str__(self):
+        return '.'.join(self)
+
+    @property
+    def safe_str(self):
+        return '.'.join(self)
+
+    @property
+    def ns(self):
+        return self[:2]
+
+    def as_tuple(self):
+        return tuple(self)
+
+    def replace(self, **kwargs):
+        x = CodesXBase._replace(self, **kwargs)
+        return g_codes_pool.setdefault(x, x)
+
+
+g_codes_patterns = {}
+
+
+def match_codes(pattern, codes):
+    spattern = pattern.safe_str
+    scodes = codes.safe_str
+    if spattern not in g_codes_patterns:
+        rpattern = re.compile(fnmatch.translate(spattern), re.I)
+        g_codes_patterns[spattern] = rpattern
+
+    rpattern = g_codes_patterns[spattern]
+    return bool(rpattern.match(scodes))
+
 
 g_content_kinds = [
     'undefined',
@@ -49,9 +327,24 @@ g_content_kinds = [
     'waveform_promise']
 
 
+g_codes_classes = [
+    CodesX,
+    CodesNSLCE,
+    CodesNSL,
+    CodesNSLCE,
+    CodesNSLCE,
+    CodesX,
+    CodesNSLCE]
+
+
+def to_codes(kind_id, codes_safe_str):
+    return g_codes_classes[kind_id](safe_str=codes_safe_str)
+
+
 g_content_kind_ids = (
     UNDEFINED, WAVEFORM, STATION, CHANNEL, RESPONSE, EVENT,
     WAVEFORM_PROMISE) = range(len(g_content_kinds))
+
 
 g_tmin, g_tmax = util.get_working_system_time_range()[:2]
 
@@ -209,12 +502,12 @@ def tscale_to_kscale(tscale):
     return int(num.searchsorted(tscale_edges, tscale))
 
 
-class Station(Content):
+@squirrel_content
+class Station(Object):
     '''
     A seismic station.
     '''
 
-    agency = String.T(default='', help='Agency code (2-5)')
     network = String.T(default='', help='Deployment/network code (1-8)')
     station = String.T(default='', help='Station code (1-5)')
     location = String.T(default='', optional=True, help='Location code (0-2)')
@@ -232,7 +525,7 @@ class Station(Content):
     @property
     def codes(self):
         return (
-            self.agency, self.network, self.station,
+            self.network, self.station,
             self.location if self.location is not None else '*')
 
     @property
@@ -262,17 +555,13 @@ class Station(Content):
             self.depth)
 
 
-class Channel(Content):
+@squirrel_content
+class Channel(Object):
     '''
     A channel of a seismic station.
     '''
 
-    agency = String.T(default='', help='Agency code (2-5)')
-    network = String.T(default='', help='Deployment/network code (1-8)')
-    station = String.T(default='', help='Station code (1-5)')
-    location = String.T(default='', help='Location code (0-2)')
-    channel = String.T(default='', help='Channel code (3)')
-    extra = String.T(default='', help='Extra/custom code')
+    codes = CodesNSLCE.T()
 
     tmin = Timestamp.T(optional=True)
     tmax = Timestamp.T(optional=True)
@@ -286,28 +575,9 @@ class Channel(Content):
     azimuth = Float.T(optional=True)
     deltat = Float.T(optional=True)
 
-    @property
-    def codes(self):
-        return (
-            self.agency, self.network, self.station, self.location,
-            self.channel, self.extra)
-
-    def set_codes(
-            self, agency=None, network=None, station=None, location=None,
-            channel=None, extra=None):
-
-        if agency is not None:
-            self.agency = agency
-        if network is not None:
-            self.network = network
-        if station is not None:
-            self.station = station
-        if location is not None:
-            self.location = location
-        if channel is not None:
-            self.channel = channel
-        if extra is not None:
-            self.extra = extra
+    def __init__(self, **kwargs):
+        kwargs['codes'] = CodesNSLCE(kwargs['codes'])
+        Object.__init__(self, **kwargs)
 
     @property
     def time_span(self):
@@ -322,10 +592,10 @@ class Channel(Content):
 
     def _get_pyrocko_station_args(self):
         return (
-            self.channel,
-            self.network,
-            self.station,
-            self.location,
+            self.codes.channel,
+            self.codes.network,
+            self.codes.station,
+            self.codes.location,
             self.lat,
             self.lon,
             self.elevation,
@@ -334,18 +604,13 @@ class Channel(Content):
     def _get_pyrocko_channel_args(self):
         return (
             '*',
-            self.channel,
+            self.codes.channel,
             self.azimuth,
             self.dip)
 
     def _get_sensor_args(self):
         return (
-            self.agency,
-            self.network,
-            self.station,
-            self.location,
-            self.channel[:-1] + '?',
-            self.extra,
+            self.codes.replace(channel=self.codes.channel[:-1] + '?'),
             self.lat,
             self.lon,
             self.elevation,
@@ -370,19 +635,14 @@ class Sensor(Channel):
             groups[channel._get_sensor_args()].append(channel)
 
         return [cls(
-                agency=args[0],
-                network=args[1],
-                station=args[2],
-                location=args[3],
-                channel=args[4],
-                extra=args[5],
-                lat=args[6],
-                lon=args[7],
-                elevation=args[8],
-                depth=args[9],
-                deltat=args[10],
-                tmin=args[11],
-                tmax=args[12])
+                codes=args[0],
+                lat=args[1],
+                lon=args[2],
+                elevation=args[3],
+                depth=args[4],
+                deltat=args[5],
+                tmin=args[6],
+                tmax=args[7])
                 for args, _ in groups.items()]
 
 
@@ -497,18 +757,13 @@ def response_converters(input_quantity, output_quantity):
             input_quantity, output_quantity))
 
 
-class Response(Content):
+@squirrel_content
+class Response(Object):
     '''
     The instrument response of a seismic station channel.
     '''
 
-    agency = String.T(default='', help='Agency code (2-5)')
-    network = String.T(default='', help='Deployment/network code (1-8)')
-    station = String.T(default='', help='Station code (1-5)')
-    location = String.T(default='', help='Location code (0-2)')
-    channel = String.T(default='', help='Channel code (3)')
-    extra = String.T(default='', help='Extra/custom code')
-
+    codes = CodesNSLCE.T()
     tmin = Timestamp.T(optional=True)
     tmax = Timestamp.T(optional=True)
 
@@ -518,11 +773,9 @@ class Response(Content):
     deltat = Float.T(optional=True)
     log = List.T(Tuple.T(3, String.T()))
 
-    @property
-    def codes(self):
-        return (
-            self.agency, self.network, self.station, self.location,
-            self.channel, self.extra)
+    def __init__(self, **kwargs):
+        kwargs['codes'] = CodesNSLCE(kwargs['codes'])
+        Object.__init__(self, **kwargs)
 
     @property
     def time_span(self):
@@ -565,12 +818,14 @@ class Response(Content):
     @property
     def summary(self):
         orate = self.output_sample_rate
-        return Content.summary.fget(self) + ', ' + ', '.join((
-            '%s => %s' % (
-                self.input_quantity or '?', self.output_quantity or '?')
-            + (' @ %g Hz' % orate if orate else ''),
-            self.stages_summary,
-        ))
+        return '%s %-16s %s' % (
+            self.__class__.__name__, self.str_codes, self.str_time_span) \
+            + ', ' + ', '.join((
+                '%s => %s' % (
+                    self.input_quantity or '?', self.output_quantity or '?')
+                + (' @ %g Hz' % orate if orate else ''),
+                self.stages_summary,
+            ))
 
     def get_effective(self, input_quantity=None):
         elements = response_converters(input_quantity, self.input_quantity)
@@ -581,7 +836,8 @@ class Response(Content):
         return MultiplyResponse(responses=simplify_responses(elements))
 
 
-class Event(Content):
+@squirrel_content
+class Event(Object):
     '''
     A seismic event.
     '''
@@ -620,7 +876,8 @@ def random_name(n=8):
     return urlsafe_b64encode(urandom(n)).rstrip(b'=').decode('ascii')
 
 
-class WaveformPromise(Content):
+@squirrel_content
+class WaveformPromise(Object):
     '''
     Information about a waveform potentially downloadable from a remote site.
 
@@ -638,13 +895,7 @@ class WaveformPromise(Content):
     queries for waveforms missing at the remote site.
     '''
 
-    agency = String.T(default='', help='Agency code (2-5)')
-    network = String.T(default='', help='Deployment/network code (1-8)')
-    station = String.T(default='', help='Station code (1-5)')
-    location = String.T(default='', help='Location code (0-2)')
-    channel = String.T(default='', help='Channel code (3)')
-    extra = String.T(default='', help='Extra/custom code')
-
+    codes = CodesNSLCE.T()
     tmin = Timestamp.T()
     tmax = Timestamp.T()
 
@@ -652,11 +903,9 @@ class WaveformPromise(Content):
 
     source_hash = String.T()
 
-    @property
-    def codes(self):
-        return (
-            self.agency, self.network, self.station, self.location,
-            self.channel, self.extra)
+    def __init__(self, **kwargs):
+        kwargs['codes'] = CodesNSLCE(kwargs['codes'])
+        Object.__init__(self, **kwargs)
 
     @property
     def time_span(self):
@@ -673,7 +922,7 @@ class WaveformOrder(Object):
     '''
 
     source_id = String.T()
-    codes = Tuple.T(None, String.T())
+    codes = CodesNSLCE.T()
     deltat = Float.T()
     tmin = Timestamp.T()
     tmax = Timestamp.T()
@@ -735,16 +984,16 @@ class Nut(Object):
     file_element = Int.T(optional=True)
 
     kind_id = Int.T()
-    codes = String.T()
+    codes = Any.T()
 
-    tmin_seconds = Timestamp.T()
+    tmin_seconds = Int.T(default=0)
     tmin_offset = Int.T(default=0, optional=True)
-    tmax_seconds = Timestamp.T()
+    tmax_seconds = Int.T(default=0)
     tmax_offset = Int.T(default=0, optional=True)
 
     deltat = Float.T(default=0.0)
 
-    content = Content.T(optional=True)
+    content = Any.T(optional=True)
 
     content_in_db = False
 
@@ -757,7 +1006,7 @@ class Nut(Object):
             file_segment=None,
             file_element=None,
             kind_id=0,
-            codes='',
+            codes=CodesX(''),
             tmin_seconds=None,
             tmin_offset=0,
             tmax_seconds=None,
@@ -772,11 +1021,12 @@ class Nut(Object):
             (self.file_path, self.file_format, self.file_mtime,
              self.file_size,
              self.file_segment, self.file_element,
-             self.kind_id, self.codes,
+             self.kind_id, codes_safe_str,
              self.tmin_seconds, self.tmin_offset,
              self.tmax_seconds, self.tmax_offset,
              self.deltat) = values_nocheck
 
+            self.codes = to_codes(self.kind_id, codes_safe_str)
             self.content = None
         else:
             if tmin is not None:
@@ -786,7 +1036,7 @@ class Nut(Object):
                 tmax_seconds, tmax_offset = tsplit(tmax)
 
             self.kind_id = int(kind_id)
-            self.codes = str(codes)
+            self.codes = codes
             self.tmin_seconds = int_or_g_tmin(tmin_seconds)
             self.tmin_offset = int(tmin_offset)
             self.tmax_seconds = int_or_g_tmax(tmax_seconds)
@@ -864,11 +1114,9 @@ class Nut(Object):
 
     @property
     def waveform_kwargs(self):
-        agency, network, station, location, channel, extra = \
-            self.codes.split(separator)
+        network, station, location, channel, extra = self.codes
 
         return dict(
-            agency=agency,
             network=network,
             station=station,
             location=location,
@@ -880,59 +1128,35 @@ class Nut(Object):
 
     @property
     def waveform_promise_kwargs(self):
-        agency, network, station, location, channel, extra = \
-            self.codes.split(separator)
-
         return dict(
-            agency=agency,
-            network=network,
-            station=station,
-            location=location,
-            channel=channel,
-            extra=extra,
+            codes=self.codes,
             tmin=self.tmin,
             tmax=self.tmax,
             deltat=self.deltat)
 
     @property
     def station_kwargs(self):
-        agency, network, station, location = self.codes.split(separator)
+        network, station, location = self.codes
         return dict(
-            agency=agency,
             network=network,
             station=station,
-            location=location if location != '*' else None,
+            location=location,
             tmin=tmin_or_none(self.tmin),
             tmax=tmax_or_none(self.tmax))
 
     @property
     def channel_kwargs(self):
-        agency, network, station, location, channel, extra \
-            = self.codes.split(separator)
-
+        network, station, location, channel, extra = self.codes
         return dict(
-            agency=agency,
-            network=network,
-            station=station,
-            location=location,
-            channel=channel,
-            extra=extra,
+            codes=self.codes,
             tmin=tmin_or_none(self.tmin),
             tmax=tmax_or_none(self.tmax),
             deltat=self.deltat)
 
     @property
     def response_kwargs(self):
-        agency, network, station, location, channel, extra \
-            = self.codes.split(separator)
-
         return dict(
-            agency=agency,
-            network=network,
-            station=station,
-            location=location,
-            channel=channel,
-            extra=extra,
+            codes=self.codes,
             tmin=tmin_or_none(self.tmin),
             tmax=tmax_or_none(self.tmax),
             deltat=self.deltat)
@@ -946,8 +1170,7 @@ class Nut(Object):
 
     @property
     def trace_kwargs(self):
-        agency, network, station, location, channel, extra = \
-            self.codes.split(separator)
+        network, station, location, channel, extra = self.codes
 
         return dict(
             network=network,
@@ -964,10 +1187,6 @@ class Nut(Object):
         return DummyTrace(self)
 
     @property
-    def codes_tuple(self):
-        return tuple(self.codes.split(separator))
-
-    @property
     def summary(self):
         if self.tmin == self.tmax:
             ts = util.time_to_str(self.tmin)
@@ -978,80 +1197,32 @@ class Nut(Object):
 
         return ' '.join((
             ('%s,' % to_kind(self.kind_id)).ljust(9),
-            ('%s,' % '.'.join(self.codes.split(separator))).ljust(18),
+            ('%s,' % str(self.codes)).ljust(18),
             ts))
 
 
-def make_waveform_nut(
-        agency='', network='', station='', location='', channel='', extra='',
-        **kwargs):
-
-    codes = separator.join(
-        (agency, network, station, location, channel, extra))
-
-    return Nut(
-        kind_id=WAVEFORM,
-        codes=codes,
-        **kwargs)
+def make_waveform_nut(**kwargs):
+    return Nut(kind_id=WAVEFORM, **kwargs)
 
 
-def make_waveform_promise_nut(
-        agency='', network='', station='', location='', channel='', extra='',
-        **kwargs):
-
-    codes = separator.join(
-        (agency, network, station, location, channel, extra))
-
-    return Nut(
-        kind_id=WAVEFORM_PROMISE,
-        codes=codes,
-        **kwargs)
+def make_waveform_promise_nut(**kwargs):
+    return Nut(kind_id=WAVEFORM_PROMISE, **kwargs)
 
 
-def make_station_nut(
-        agency='', network='', station='', location='', **kwargs):
-
-    codes = separator.join((agency, network, station, location))
-
-    return Nut(
-        kind_id=STATION,
-        codes=codes,
-        **kwargs)
+def make_station_nut(**kwargs):
+    return Nut(kind_id=STATION, **kwargs)
 
 
-def make_channel_nut(
-        agency='', network='', station='', location='', channel='', extra='',
-        **kwargs):
-
-    codes = separator.join(
-        (agency, network, station, location, channel, extra))
-
-    return Nut(
-        kind_id=CHANNEL,
-        codes=codes,
-        **kwargs)
+def make_channel_nut(**kwargs):
+    return Nut(kind_id=CHANNEL, **kwargs)
 
 
-def make_response_nut(
-        agency='', network='', station='', location='', channel='', extra='',
-        **kwargs):
-
-    codes = separator.join(
-        (agency, network, station, location, channel, extra))
-
-    return Nut(
-        kind_id=RESPONSE,
-        codes=codes,
-        **kwargs)
+def make_response_nut(**kwargs):
+    return Nut(kind_id=RESPONSE, **kwargs)
 
 
-def make_event_nut(name='', **kwargs):
-
-    codes = name
-
-    return Nut(
-        kind_id=EVENT, codes=codes,
-        **kwargs)
+def make_event_nut(**kwargs):
+    return Nut(kind_id=EVENT, **kwargs)
 
 
 def group_channels(nuts):
@@ -1081,7 +1252,7 @@ class DummyTrace(object):
 
     def __init__(self, nut):
         self.nut = nut
-        self._codes = None
+        self.codes = nut.codes
         self.meta = {}
 
     @property
@@ -1097,39 +1268,28 @@ class DummyTrace(object):
         return self.nut.deltat
 
     @property
-    def codes(self):
-        if self._codes is None:
-            self._codes = self.nut.codes_tuple
-
-        return self._codes
-
-    @property
     def nslc_id(self):
-        return self.codes[1:5]
-
-    @property
-    def agency(self):
-        return self.codes[0]
+        return self.codes.nslc
 
     @property
     def network(self):
-        return self.codes[1]
+        return self.codes.network
 
     @property
     def station(self):
-        return self.codes[2]
+        return self.codes.station
 
     @property
     def location(self):
-        return self.codes[3]
+        return self.codes.location
 
     @property
     def channel(self):
-        return self.codes[4]
+        return self.codes.channel
 
     @property
     def extra(self):
-        return self.codes[5]
+        return self.codes.extra
 
     def overlaps(self, tmin, tmax):
         return not (tmax < self.nut.tmin or self.nut.tmax < tmin)
@@ -1180,7 +1340,7 @@ class Coverage(Object):
 
         return ' '.join((
             ('%s,' % to_kind(self.kind_id)).ljust(9),
-            ('%s,' % '.'.join(self.codes.split(separator))).ljust(18),
+            ('%s,' % str(self.codes)).ljust(18),
             ts,
             '%10.3g,' % srate if srate else '',
             '%4i' % len(self.changes),
@@ -1199,7 +1359,7 @@ class Coverage(Object):
     def labels(self):
         srate = self.sample_rate
         return (
-            ('%s' % '.'.join(self.codes.split(separator))),
+            ('%s' % self.codes),
             '%.3g' % srate if srate else '')
 
     @property
@@ -1222,11 +1382,14 @@ class Coverage(Object):
 
 
 __all__ = [
-    'separator',
     'to_kind',
     'to_kinds',
     'to_kind_id',
     'to_kind_ids',
+    'CodesError',
+    'CodesNSLCE',
+    'CodesNSL',
+    'CodesX',
     'Station',
     'Channel',
     'Sensor',
