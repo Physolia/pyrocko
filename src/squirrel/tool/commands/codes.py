@@ -6,6 +6,7 @@
 from __future__ import absolute_import, print_function
 
 from .. import common
+from pyrocko.squirrel.model import to_kind
 
 
 def setup_subcommand(subparsers):
@@ -20,5 +21,5 @@ def setup(parser):
 
 def call(parser, args):
     squirrel = common.squirrel_from_selection_arguments(args)
-    for kind, codes, deltat, _, count in squirrel._iter_codes_info():
-        print(kind, codes, deltat, count)
+    for kind_id, codes, deltat, _, count in squirrel._iter_codes_info():
+        print(to_kind(kind_id), codes, deltat, count)
