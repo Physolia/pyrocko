@@ -3025,7 +3025,7 @@ def MakePileViewerMainClass(base):
 
                 pattern = self.track_patterns[itrack]
                 pattern_to_itrack[tuple(pattern)] = itrack
-                pattern_list.append(pattern)
+                pattern_list.append(tuple(pattern))
 
             vmin, vmax = self.get_time_range()
 
@@ -3033,7 +3033,7 @@ def MakePileViewerMainClass(base):
                 for entry in sq.get_coverage(
                         kind, vmin, vmax, pattern_list, limit=500):
                     pattern, codes, deltat, tmin, tmax, cover_data = entry
-                    itrack = pattern_to_itrack[tuple(pattern)]
+                    itrack = pattern_to_itrack[pattern.nslc]
 
                     if cover_data is None:
                         drawbox(

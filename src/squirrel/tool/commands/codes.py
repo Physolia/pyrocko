@@ -21,4 +21,4 @@ def setup(parser):
 def call(parser, args):
     squirrel = common.squirrel_from_selection_arguments(args)
     for kind, codes, deltat, _, count in squirrel._iter_codes_info():
-        print(kind, '.'.join(codes), deltat, count)
+        print(kind, codes, deltat, count)

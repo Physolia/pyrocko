@@ -337,8 +337,12 @@ g_codes_classes = [
     CodesNSLCE]
 
 
-def to_codes(kind_id, codes_safe_str):
+def to_codes_simple(kind_id, codes_safe_str):
     return g_codes_classes[kind_id](safe_str=codes_safe_str)
+
+
+def to_codes(kind_id, obj):
+    return g_codes_classes[kind_id](obj)
 
 
 g_content_kind_ids = (
@@ -438,7 +442,7 @@ def time_or_none_to_str(x):
 
 
 def codes_to_str_abbreviated(codes, indent='  '):
-    codes = ['.'.join(x) for x in codes]
+    codes = [str(x) for x in codes]
 
     if len(codes) > 20:
         scodes = '\n' + util.ewrap(codes[:10], indent=indent) \
@@ -934,7 +938,7 @@ class WaveformOrder(Object):
 
     def describe(self, site='?'):
         return '%s:%s %s [%s - %s]' % (
-            self.client, site, '.'.join(self.codes),
+            self.client, site, str(self.codes),
             util.time_to_str(self.tmin), util.time_to_str(self.tmax))
 
     def validate(self, tr):
@@ -1026,7 +1030,7 @@ class Nut(Object):
              self.tmax_seconds, self.tmax_offset,
              self.deltat) = values_nocheck
 
-            self.codes = to_codes(self.kind_id, codes_safe_str)
+            self.codes = to_codes_simple(self.kind_id, codes_safe_str)
             self.content = None
         else:
             if tmin is not None:
@@ -1359,7 +1363,7 @@ class Coverage(Object):
     def labels(self):
         srate = self.sample_rate
         return (
-            ('%s' % self.codes),
+            ('%s' % str(self.codes)),
             '%.3g' % srate if srate else '')
 
     @property

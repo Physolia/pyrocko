@@ -18,7 +18,7 @@ from pyrocko.io.io_common import FileLoadError
 from pyrocko import util
 from pyrocko.guts import Object, Int, List, Dict, Tuple, String
 from . import error, io
-from .model import Nut, to_kind_id, to_kind, to_codes
+from .model import Nut, to_kind_id, to_kind, to_codes_simple
 from .error import SquirrelError
 
 logger = logging.getLogger('psq.database')
@@ -721,7 +721,8 @@ class Database(object):
         for kind_id, scodes, deltat, kcid, count in self._conn.execute(
                 sql, args):
 
-            yield kind_id, to_codes(kind_id, scodes), deltat, kcid, count
+            yield (
+                kind_id, to_codes_simple(kind_id, scodes), deltat, kcid, count)
 
     def _iter_deltats(self, kind=None, kind_codes_count='kind_codes_count'):
         args = []
@@ -764,7 +765,7 @@ class Database(object):
         ''') % dict(kind_codes_count=kind_codes_count)
 
         for row in self._conn.execute(sql, args):
-            yield to_codes(*row)
+            yield to_codes_simple(*row)
 
     def _iter_kinds(self, codes=None, kind_codes_count='kind_codes_count'):
         args = []
