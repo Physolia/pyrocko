@@ -526,7 +526,8 @@ class FDSNSource(Source):
             tmax=ctmax)
 
         coverages = squirrel.get_coverage(
-            'waveform', codes_list=[constraint.codes],
+            'waveform',
+            codes_list=[constraint.codes] if constraint.codes else None,
             tmin=ctmin,
             tmax=ctmax,
             return_raw=False)
