@@ -47,6 +47,10 @@ class CodesError(SquirrelError):
     pass
 
 
+class Codes(SObject):
+    pass
+
+
 def normalize_nslce(*args, **kwargs):
     if args and kwargs:
         raise ValueError('Either *args or **kwargs accepted, not both.')
@@ -94,7 +98,7 @@ CodesNSLCEBase = namedtuple(
         'network', 'station', 'location', 'channel', 'extra'])
 
 
-class CodesNSLCE(CodesNSLCEBase, SObject):
+class CodesNSLCE(CodesNSLCEBase, Codes):
     '''
     Codes denominating a seismic channel (NSLC or NSLCE).
 
@@ -120,7 +124,7 @@ class CodesNSLCE(CodesNSLCEBase, SObject):
         return g_codes_pool.setdefault(x, x)
 
     def __init__(self, *args, **kwargs):
-        SObject.__init__(self)
+        Codes.__init__(self)
 
     def __str__(self):
         if self.extra == '':
@@ -200,7 +204,7 @@ CodesNSLBase = namedtuple(
         'network', 'station', 'location'])
 
 
-class CodesNSL(CodesNSLBase, SObject):
+class CodesNSL(CodesNSLBase, Codes):
     '''
     Codes denominating a seismic station (NSL).
 
@@ -226,7 +230,7 @@ class CodesNSL(CodesNSLBase, SObject):
         return g_codes_pool.setdefault(x, x)
 
     def __init__(self, *args, **kwargs):
-        SObject.__init__(self)
+        Codes.__init__(self)
 
     def __str__(self):
         return '.'.join(self)
@@ -258,7 +262,7 @@ CodesXBase = namedtuple(
         'name'])
 
 
-class CodesX(CodesXBase, SObject):
+class CodesX(CodesXBase, Codes):
     '''
     General purpose codes for anything other than channels or stations.
     '''
@@ -282,7 +286,7 @@ class CodesX(CodesXBase, SObject):
         return g_codes_pool.setdefault(x, x)
 
     def __init__(self, *args, **kwargs):
-        SObject.__init__(self)
+        Codes.__init__(self)
 
     def __str__(self):
         return '.'.join(self)
@@ -988,7 +992,7 @@ class Nut(Object):
     file_element = Int.T(optional=True)
 
     kind_id = Int.T()
-    codes = Any.T()
+    codes = Codes.T()
 
     tmin_seconds = Int.T(default=0)
     tmin_offset = Int.T(default=0, optional=True)
@@ -1315,8 +1319,8 @@ class Coverage(Object):
     Information about times covered by a waveform or other content type.
     '''
     kind_id = Int.T()
-    pattern = String.T()
-    codes = String.T()
+    pattern = Codes.T()
+    codes = Codes.T()
     deltat = Float.T(optional=True)
     tmin = Timestamp.T(optional=True)
     tmax = Timestamp.T(optional=True)
@@ -1391,6 +1395,7 @@ __all__ = [
     'to_kind_id',
     'to_kind_ids',
     'CodesError',
+    'Codes',
     'CodesNSLCE',
     'CodesNSL',
     'CodesX',

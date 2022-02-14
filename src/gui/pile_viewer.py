@@ -3032,17 +3032,16 @@ def MakePileViewerMainClass(base):
             for kind in ['waveform', 'waveform_promise']:
                 for entry in sq.get_coverage(
                         kind, vmin, vmax, pattern_list, limit=500):
-                    pattern, codes, deltat, tmin, tmax, cover_data = entry
-                    itrack = pattern_to_itrack[pattern.nslc]
+                    itrack = pattern_to_itrack[entry.pattern.nslc]
 
-                    if cover_data is None:
+                    if entry.changes is None:
                         drawbox(
-                            itrack, tmin, tmax,
+                            itrack, entry.tmin, entry.tmax,
                             box_styles_coverage[kind][0])
                     else:
                         t = None
                         pcount = 0
-                        for tb, count in cover_data:
+                        for tb, count in entry.changes:
                             if t is not None and tb > t:
                                 if pcount > 0:
                                     drawbox(
