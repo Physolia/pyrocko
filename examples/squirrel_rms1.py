@@ -1,7 +1,10 @@
 import numpy as np
 from pyrocko import progress
-from pyrocko.util import time_to_str as tts, str_to_time_fillup as stt
+from pyrocko.util import setup_logging, time_to_str, str_to_time_fillup as stt
 from pyrocko.squirrel import Squirrel
+
+
+setup_logging('squirrel_rms1.py', 'info')
 
 
 def rms(data):
@@ -17,7 +20,7 @@ fmin = 0.01
 fmax = 0.05
 
 # Enable progress bars:
-progress.set_default_viewer('terminal')
+progress.set_default_viewer('log')
 
 # All data access will happen through a single Squirrel instance:
 sq = Squirrel()
@@ -37,7 +40,6 @@ sq.update(tmin=tmin, tmax=tmax)
 # yet, it just enables downloads later, when needed. Omit `tmin`, `tmax`,
 # and `codes` to enable download of all everything.
 sq.update_waveform_promises(tmin=tmin, tmax=tmax, codes='*.BFO.*.*')
-print(sq)
 
 # Iterate window-wise, with some overlap over the data:
 for batch in sq.chopper_waveforms(
@@ -59,4 +61,4 @@ for batch in sq.chopper_waveforms(
         tr.chop(batch.tmin, batch.tmax)
 
         # Print channel codes, time-mark and RMS value of the hour.
-        print(tr.str_codes, tts(tr.tmin), rms(tr.ydata))
+        print(tr.str_codes, time_to_str(tr.tmin), rms(tr.ydata))

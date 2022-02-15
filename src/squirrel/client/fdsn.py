@@ -549,7 +549,6 @@ class FDSNSource(Source):
 
         def wanted(nuts):
             for nut in nuts:
-                print(nut)
                 if nut.tmin < now:
                     if nut.tmax > now:
                         nut.tmax = now

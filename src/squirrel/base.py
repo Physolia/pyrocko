@@ -955,7 +955,7 @@ class Squirrel(Selection):
                 cond.append(
                     ' ( %s ) ' % ' OR '.join(
                         ('kind_codes.codes GLOB ?',) * len(pats)))
-                args.extend(str(pat) for pat in pats)
+                args.extend(pat.safe_str for pat in pats)
 
         if kind_codes_ids is not None:
             cond.append(
@@ -1059,7 +1059,7 @@ class Squirrel(Selection):
                         cond.append(
                             ' ( %s ) ' % ' OR '.join(
                                 ('kind_codes.codes GLOB ?',) * len(pats)))
-                        args.extend(str(pat) for pat in pats)
+                        args.extend(pat.safe_str for pat in pats)
 
                 if path is not None:
                     cond.append('files.path == ?')
@@ -1415,7 +1415,7 @@ class Squirrel(Selection):
             codes_cond = 'AND ( %s ) ' % ' OR '.join(
                     ('kind_codes.codes GLOB ?',) * len(pats))
 
-            args.extend(str(pat) for pat in pats)
+            args.extend(pat.safe_str for pat in pats)
         else:
             codes_cond = ''
 
