@@ -208,17 +208,10 @@ class Operator(Object):
         _, in_codes, out_codes = group
         assert len(in_codes) == 1 and len(out_codes) == 1
         channels = squirrel.get_channels(codes=in_codes[0], **kwargs)
-        agn, net, sta, loc, cha, ext = out_codes[0]
         channels_out = []
         for channel in channels:
             channel_out = clone(channel)
-            channel_out.set_codes(
-                agency=agn,
-                network=net,
-                station=sta,
-                location=loc,
-                channel=cha,
-                extra=ext)
+            channel_out.codes = out_codes[0]
             channels_out.append(channel_out)
 
         return channels_out
@@ -228,15 +221,8 @@ class Operator(Object):
         assert len(in_codes) == 1 and len(out_codes) == 1
 
         trs = squirrel.get_waveforms(codes=in_codes[0], **kwargs)
-        agn, net, sta, loc, cha, ext = out_codes[0]
         for tr in trs:
-            tr.set_codes(
-                agency=agn,
-                network=net,
-                station=sta,
-                location=loc,
-                channel=cha,
-                extra=ext)
+            tr.set_codes(*out_codes[0])
 
         return trs
 
@@ -304,7 +290,6 @@ class Restitution(Operator):
             params.frequency_max,
             params.frequency_max * params.frequency_taper_factor)
 
-        agn, net, sta, loc, cha, ext = out_codes[0]
         trs_rest = []
         for tr in trs:
             tr_rest = tr.transfer(
@@ -313,13 +298,7 @@ class Restitution(Operator):
                 transfer_function=resp,
                 invert=True)
 
-            tr_rest.set_codes(
-                agency=agn,
-                network=net,
-                station=sta,
-                location=loc,
-                channel=cha,
-                extra=ext)
+            tr_rest.set_codes(*out_codes[0])
 
             trs_rest.append(tr_rest)
 
