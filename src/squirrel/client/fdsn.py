@@ -529,8 +529,7 @@ class FDSNSource(Source):
             'waveform',
             codes_list=[constraint.codes] if constraint.codes else None,
             tmin=ctmin,
-            tmax=ctmax,
-            return_raw=False)
+            tmax=ctmax)
 
         codes_to_avail = defaultdict(list)
         for coverage in coverages:
@@ -550,6 +549,7 @@ class FDSNSource(Source):
 
         def wanted(nuts):
             for nut in nuts:
+                print(nut)
                 if nut.tmin < now:
                     if nut.tmax > now:
                         nut.tmax = now

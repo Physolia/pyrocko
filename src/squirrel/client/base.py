@@ -32,6 +32,12 @@ class Constraint(Object):
     tmax = Timestamp.T(optional=True)
     codes = CodesNSLCE.T(optional=True)
 
+    def __init__(self, **kwargs):
+        if 'codes' in kwargs:
+            kwargs['codes'] = CodesNSLCE(kwargs['codes'])
+
+        Object.__init__(self, **kwargs)
+
     def contains(self, constraint):
         '''
         Check if the constraint completely includes a more restrictive one.

@@ -113,8 +113,13 @@ class CodesNSLCE(CodesNSLCEBase, Codes):
     as_dict = CodesNSLCEBase._asdict
 
     def __new__(cls, *args, safe_str=None, **kwargs):
-        if len(args) == 1 and isinstance(args[0], CodesNSLCE):
+        nargs = len(args)
+        if nargs == 1 and isinstance(args[0], CodesNSLCE):
             return args[0]
+        elif nargs == 1 and isinstance(args[0], CodesNSL):
+            t = (args[0].tuple) + ('*', '*')
+        elif nargs == 1 and isinstance(args[0], CodesX):
+            t = ('*', '*', '*', '*', '*')
         elif safe_str is not None:
             t = safe_str.split('.')
         else:
@@ -219,8 +224,13 @@ class CodesNSL(CodesNSLBase, Codes):
     as_dict = CodesNSLBase._asdict
 
     def __new__(cls, *args, safe_str=None, **kwargs):
-        if len(args) == 1 and isinstance(args[0], CodesNSL):
+        nargs = len(args)
+        if nargs == 1 and isinstance(args[0], CodesNSL):
             return args[0]
+        elif nargs == 1 and isinstance(args[0], CodesNSLCE):
+            t = args[0].nsl
+        elif nargs == 1 and isinstance(args[0], CodesX):
+            t = ('*', '*', '*')
         elif safe_str is not None:
             t = safe_str.split('.')
         else:
@@ -276,6 +286,8 @@ class CodesX(CodesXBase, Codes):
     def __new__(cls, name='', safe_str=None):
         if isinstance(name, CodesX):
             return name
+        elif isinstance(name, (CodesNSLCE, CodesNSL)):
+            name = '*'
         elif safe_str is not None:
             name = safe_str
         else:
@@ -1316,15 +1328,30 @@ def duration_to_str(t):
 
 class Coverage(Object):
     '''
-    Information about times covered by a waveform or other content type.
+    Information about times covered by a waveform or other time series data.
     '''
-    kind_id = Int.T()
-    pattern = Codes.T()
-    codes = Codes.T()
-    deltat = Float.T(optional=True)
-    tmin = Timestamp.T(optional=True)
-    tmax = Timestamp.T(optional=True)
-    changes = List.T(Tuple.T(2, Any.T()))
+    kind_id = Int.T(
+        help='Content type.')
+    pattern = Codes.T(
+        help='The codes pattern in the request, which caused this entry to '
+             'match.')
+    codes = Codes.T(
+        help='NSLCE or NSL codes identifier of the time series.')
+    deltat = Float.T(
+        help='Sampling interval [s]',
+        optional=True)
+    tmin = Timestamp.T(
+        help='Global start time of time series.',
+        optional=True)
+    tmax = Timestamp.T(
+        help='Global end time of time series.',
+        optional=True)
+    changes = List.T(
+        Tuple.T(2, Any.T()),
+        help='List of change points, with entries of the form '
+             '``(time, count)``, where a ``count`` of zero indicates start of '
+             'a gap, a value of 1 start of normal data coverage and a higher '
+             'value duplicate or redundant data coverage.')
 
     @classmethod
     def from_values(cls, args):

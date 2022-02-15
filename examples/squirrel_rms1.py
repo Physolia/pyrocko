@@ -1,5 +1,5 @@
 import numpy as np
-from pyrocko.progress import progress
+from pyrocko import progress
 from pyrocko.util import time_to_str as tts, str_to_time_fillup as stt
 from pyrocko.squirrel import Squirrel
 

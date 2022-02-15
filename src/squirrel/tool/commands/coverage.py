@@ -51,7 +51,7 @@ def call(parser, args):
             codes_list=[codes] if codes else None,
             tmin=tmin,
             tmax=tmax,
-            return_raw=False, **kwargs)
+            **kwargs)
 
         if coverage:
             slabels = [entry.labels for entry in coverage]

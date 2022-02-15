@@ -20,7 +20,8 @@ from pyrocko.progress import progress
 
 from . import model, io, cache, dataset
 
-from .model import to_kind_id, WaveformOrder, to_kind
+from .model import to_kind_id, WaveformOrder, to_kind, to_codes, \
+    STATION, CHANNEL, RESPONSE, EVENT, WAVEFORM
 from .client import fdsn, catalog
 from .selection import Selection, filldocs
 from .database import abspath
@@ -43,36 +44,6 @@ def lpick(condition, seq):
     return ft
 
 
-c_kind_to_ncodes = {
-    'station': 3,
-    'channel': 5,
-    'response': 5,
-    'waveform': 5,
-    'event': 1,
-    'waveform_promise': 5,
-    'undefined': 1}
-
-
-c_inflated = ['*', '*', '*', '*', '*']
-c_offsets = [0, 1, 1, 1, 1, 1, 0]
-
-
-def codes_inflate(codes):
-    codes = codes[:6]
-    inflated = list(c_inflated)
-    ncodes = len(codes)
-    offset = c_offsets[ncodes]
-    inflated[offset:offset+ncodes] = codes
-    return inflated
-
-
-def codes_inflate2(codes):
-    inflated = list(c_inflated)
-    ncodes = len(codes)
-    inflated[:ncodes] = codes
-    return tuple(inflated)
-
-
 def codes_patterns_for_kind(kind, codes):
     if not codes:
         return []
@@ -86,14 +57,12 @@ def codes_patterns_for_kind(kind, codes):
     if kind in ('event', 'undefined'):
         return [codes]
 
-    cfill = codes_inflate(codes)[:c_kind_to_ncodes[kind]]
+    codes = to_codes(to_kind_id(kind), codes)
 
     if kind == 'station':
-        cfill2 = list(cfill)
-        cfill2[3] = '[*]'
-        return [cfill, cfill2]
-
-    return [cfill]
+        return [codes, codes.replace(location='[*]')]
+    else:
+        return [codes]
 
 
 def group_channels(channels):
@@ -838,7 +807,11 @@ class Squirrel(Selection):
         ds.setup(self, check=check)
 
     def _get_selection_args(
-            self, obj=None, tmin=None, tmax=None, time=None, codes=None):
+            self, kind_id,
+            obj=None, tmin=None, tmax=None, time=None, codes=None):
+
+        if codes is not None:
+            codes = to_codes(kind_id, codes)
 
         if time is not None:
             tmin = time
@@ -847,10 +820,7 @@ class Squirrel(Selection):
         if obj is not None:
             tmin = tmin if tmin is not None else obj.tmin
             tmax = tmax if tmax is not None else obj.tmax
-            codes = codes if codes is not None else codes_inflate2(obj.codes)
-
-        if isinstance(codes, str):
-            codes = tuple(codes.split('.'))
+            codes = codes if codes is not None else obj.codes
 
         return tmin, tmax, codes
 
@@ -1718,7 +1688,9 @@ class Squirrel(Selection):
         if model == 'pyrocko':
             return self._get_pyrocko_stations(obj, tmin, tmax, time, codes)
         elif model == 'squirrel':
-            args = self._get_selection_args(obj, tmin, tmax, time, codes)
+            args = self._get_selection_args(
+                STATION, obj, tmin, tmax, time, codes)
+
             nuts = sorted(
                 self.iter_nuts('station', *args), key=lambda nut: nut.dkey)
             self._check_duplicates(nuts)
@@ -1741,7 +1713,9 @@ class Squirrel(Selection):
         See :py:meth:`iter_nuts` for details on time span matching.
         '''
 
-        args = self._get_selection_args(obj, tmin, tmax, time, codes)
+        args = self._get_selection_args(
+            CHANNEL, obj, tmin, tmax, time, codes)
+
         nuts = sorted(
             self.iter_nuts('channel', *args), key=lambda nut: nut.dkey)
         self._check_duplicates(nuts)
@@ -1763,14 +1737,11 @@ class Squirrel(Selection):
         '''
 
         tmin, tmax, codes = self._get_selection_args(
-            obj, tmin, tmax, time, codes)
+            CHANNEL, obj, tmin, tmax, time, codes)
 
         if codes is not None:
-            if isinstance(codes, str):
-                codes = codes.split('.')
-            codes = tuple(codes_inflate(codes))
-            if codes[4] != '*':
-                codes = codes[:4] + (codes[4][:-1] + '?',) + codes[5:]
+            if codes.channel != '*':
+                codes = codes.replace(codes.channel[:-1] + '?')
 
         nuts = sorted(
             self.iter_nuts(
@@ -1794,7 +1765,9 @@ class Squirrel(Selection):
         See :py:meth:`iter_nuts` for details on time span matching.
         '''
 
-        args = self._get_selection_args(obj, tmin, tmax, time, codes)
+        args = self._get_selection_args(
+            RESPONSE, obj, tmin, tmax, time, codes)
+
         nuts = sorted(
             self.iter_nuts('response', *args), key=lambda nut: nut.dkey)
         self._check_duplicates(nuts)
@@ -1844,7 +1817,7 @@ class Squirrel(Selection):
         See :py:meth:`iter_nuts` for details on time span matching.
         '''
 
-        args = self._get_selection_args(obj, tmin, tmax, time, codes)
+        args = self._get_selection_args(EVENT, obj, tmin, tmax, time, codes)
         nuts = sorted(
             self.iter_nuts('event', *args), key=lambda nut: nut.dkey)
         self._check_duplicates(nuts)
@@ -2029,7 +2002,7 @@ class Squirrel(Selection):
         See :py:meth:`iter_nuts` for details on time span matching.
         '''
 
-        args = self._get_selection_args(obj, tmin, tmax, time, codes)
+        args = self._get_selection_args(WAVEFORM, obj, tmin, tmax, time, codes)
         self._redeem_promises(*args)
         return sorted(
             self.iter_nuts('waveform', *args), key=lambda nut: nut.dkey)
@@ -2117,7 +2090,7 @@ class Squirrel(Selection):
         '''
 
         tmin, tmax, codes = self._get_selection_args(
-            obj, tmin, tmax, time, codes)
+            WAVEFORM, obj, tmin, tmax, time, codes)
 
         self_tmin, self_tmax = self.get_time_span(
             ['waveform', 'waveform_promise'])
@@ -2276,7 +2249,7 @@ class Squirrel(Selection):
         '''
 
         tmin, tmax, codes = self._get_selection_args(
-            obj, tmin, tmax, time, codes)
+            WAVEFORM, obj, tmin, tmax, time, codes)
 
         self_tmin, self_tmax = self.get_time_span(
             ['waveform', 'waveform_promise'])
@@ -2460,8 +2433,7 @@ class Squirrel(Selection):
         return str(self.get_stats())
 
     def get_coverage(
-            self, kind, tmin=None, tmax=None, codes_list=None, limit=None,
-            return_raw=True):
+            self, kind, tmin=None, tmax=None, codes_list=None, limit=None):
 
         '''
         Get coverage information.
@@ -2484,28 +2456,24 @@ class Squirrel(Selection):
             timestamp
 
         :param codes_list:
-            List of code patterns to query. If not given or empty, an empty
-            list is returned.
+            If given, restrict query to given content codes patterns.
         :type codes_list:
-            :py:class:`list` of :py:class:`tuple` of :py:class:`str`
+            :py:class:`list` of :py:class:`Codes` objects appropriate for the
+            queried content type, or anything which can be converted to
+            such objects.
 
         :param limit:
             Limit query to return only up to a given maximum number of entries
-            per matching channel (without setting this option, very gappy data
-            could cause the query to execute for a very long time).
+            per matching time series (without setting this option, very gappy
+            data could cause the query to execute for a very long time).
         :type limit:
             int
 
         :returns:
-            List of entries of the form ``(pattern, codes, deltat, tmin, tmax,
-            data)`` where ``pattern`` is the request code pattern which
-            yielded this entry, ``codes`` are the matching channel codes,
-            ``tmin`` and ``tmax`` are the global min and max times for which
-            data for this channel is available, regardless of any time
-            restrictions in the query. ``data`` is a list with (up to
-            ``limit``) change-points of the form ``(time, count)`` where a
-            ``count`` of zero indicates a data gap, a value of 1 normal data
-            coverage and higher values indicate duplicate/redundant data.
+            Information about time spans covered by the requested time series
+            data.
+        :rtype:
+            :py:class:`list` of :py:class:`Coverage` objects
         '''
 
         tmin_seconds, tmin_offset = model.tsplit(tmin)
@@ -2521,7 +2489,7 @@ class Squirrel(Selection):
 
         else:
             for pattern in codes_list:
-                pattern = model.to_codes(kind_id, pattern)
+                pattern = to_codes(kind_id, pattern)
                 for _, codes, deltat, kind_codes_id, _ in codes_info:
                     if model.match_codes(pattern, codes):
                         kdata_all.append(
@@ -2540,7 +2508,7 @@ class Squirrel(Selection):
 
                 counts_at_tmin[k] += 1
 
-        coverage = []
+        coverages = []
         for pattern, kind_codes_id, codes, deltat in kdata_all:
             entry = [pattern, codes, deltat, None, None, []]
             for i, order in [(0, 'ASC'), (1, 'DESC')]:
@@ -2618,13 +2586,9 @@ class Squirrel(Selection):
                 if tmax is not None and (tlast is None or tlast != tmax):
                     entry[-1].append((tmax, counts))
 
-            coverage.append(entry)
+            coverages.append(model.Coverage.from_values(entry + [kind_id]))
 
-        if return_raw:
-            return coverage
-        else:
-            return [model.Coverage.from_values(
-                entry + [kind_id]) for entry in coverage]
+        return coverages
 
     def add_operator(self, op):
         self._operators.append(op)

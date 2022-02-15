@@ -616,25 +616,25 @@ class SquirrelTestCase(unittest.TestCase):
                 database = squirrel.Database()
                 sq = squirrel.Squirrel(database=database)
                 sq.add(fns)
-                cover_ref = {}
+                changes_ref = {}
                 for qtmin, qtmax in iter_qtranges():
 
-                    entries = sq.get_coverage(
+                    coverages = sq.get_coverage(
                         'waveform', tmin=qtmin, tmax=qtmax)
 
                     if deci == 1:
-                        assert len(entries) == 4
+                        assert len(coverages) == 4
 
                     if deci == 2:
-                        assert len(entries) == 8
+                        assert len(coverages) == 8
 
-                    for entry in entries:
-                        k = entry[1], entry[2]
-                        data = entry[-1]
-                        if k not in cover_ref:
-                            cover_ref[k] = data
+                    for coverage in coverages:
+                        k = coverage.codes, coverage.deltat
+                        changes = coverage.changes
+                        if k not in changes_ref:
+                            changes_ref[k] = changes
                         else:
-                            assert_coverage_equal(cover_ref[k], data)
+                            assert_coverage_equal(changes_ref[k], changes)
 
                 # sq.snuffle()
 
@@ -667,7 +667,7 @@ class SquirrelTestCase(unittest.TestCase):
 
         assert 2 == len(
             sq.get_coverage(
-                'waveform', tmin, tmin + 3*d)[0][5])
+                'waveform', tmin, tmin + 3*d)[0].changes)
 
     def test_loading(self, with_pile=False, hours=1):
         dir = op.join(tempfile.gettempdir(), 'testdataset_d_%i' % hours)
@@ -928,7 +928,7 @@ class SquirrelTestCase(unittest.TestCase):
                 traces.extend(
                     sq.get_waveforms(
                         tmin=tmin, tmax=tmax,
-                        codes=('', 'GR', 'BFO', '', 'LHZ', extra),
+                        codes=('GR', 'BFO', '', 'LHZ', extra),
                         operator_params=squirrel.RestitutionParameters(
                             frequency_min=0.002,
                             frequency_max=10.0)))
@@ -936,7 +936,7 @@ class SquirrelTestCase(unittest.TestCase):
             traces.extend(
                 sq.get_waveforms(
                     tmin=tmin, tmax=tmax,
-                    codes=('', 'GR', 'BFO', '', 'LHZ', '')))
+                    codes=('GR', 'BFO', '', 'LHZ', '')))
 
             # trace.snuffle(traces)
 
