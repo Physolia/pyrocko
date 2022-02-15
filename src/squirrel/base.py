@@ -65,31 +65,6 @@ def codes_patterns_for_kind(kind, codes):
         return [codes]
 
 
-def group_channels(channels):
-    groups = defaultdict(list)
-    for channel in channels:
-        codes = channel.codes
-        gcodes = codes[:-1] + (codes[-1][:-1],)
-        groups[gcodes].append(channel)
-
-    return groups
-
-
-def pyrocko_station_from_channel_group(group, extra_args):
-    list_of_args = [channel._get_pyrocko_station_args() for channel in group]
-    args = util.consistency_merge(list_of_args + extra_args)
-    from pyrocko import model as pmodel
-    return pmodel.Station(
-        network=args[0],
-        station=args[1],
-        location=args[2],
-        lat=args[3],
-        lon=args[4],
-        elevation=args[5],
-        depth=args[6],
-        channels=[ch.get_pyrocko_channel() for ch in group])
-
-
 def blocks(tmin, tmax, deltat, nsamples_block=100000):
     tblock = util.to_time_float(deltat * nsamples_block)
     iblock_min = int(math.floor(tmin / tblock))
@@ -2350,13 +2325,11 @@ class Squirrel(Selection):
         by_nsl = defaultdict(lambda: (list(), list()))
         for station in self.get_stations(obj, tmin, tmax, time, codes):
             sargs = station._get_pyrocko_station_args()
-            nsl = sargs[1:4]
-            by_nsl[nsl][0].append(sargs)
+            by_nsl[station.codes.nsl][0].append(sargs)
 
         for channel in self.get_channels(obj, tmin, tmax, time, codes):
             sargs = channel._get_pyrocko_station_args()
-            nsl = sargs[1:4]
-            sargs_list, channels_list = by_nsl[nsl]
+            sargs_list, channels_list = by_nsl[channel.codes.nsl]
             sargs_list.append(sargs)
             channels_list.append(channel)
 
@@ -2365,7 +2338,8 @@ class Squirrel(Selection):
         nsls.sort()
         for nsl in nsls:
             sargs_list, channels_list = by_nsl[nsl]
-            sargs = util.consistency_merge(sargs_list)
+            sargs = util.consistency_merge(
+                [('',) + x for x in sargs_list])
 
             by_c = defaultdict(list)
             for ch in channels_list:
@@ -2376,21 +2350,12 @@ class Squirrel(Selection):
             pchannels = []
             for cha in chas:
                 list_of_cargs = by_c[cha]
-                cargs = util.consistency_merge(list_of_cargs)
-                pchannels.append(pmodel.Channel(
-                    name=cargs[0],
-                    azimuth=cargs[1],
-                    dip=cargs[2]))
+                cargs = util.consistency_merge(
+                    [('',) + x for x in list_of_cargs])
+                pchannels.append(pmodel.Channel(*cargs))
 
-            pstations.append(pmodel.Station(
-                network=sargs[0],
-                station=sargs[1],
-                location=sargs[2],
-                lat=sargs[3],
-                lon=sargs[4],
-                elevation=sargs[5],
-                depth=sargs[6] or 0.0,
-                channels=pchannels))
+            pstations.append(
+                pmodel.Station(*sargs, channels=pchannels))
 
         return pstations
 

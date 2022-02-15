@@ -29,7 +29,7 @@ from collections import defaultdict, namedtuple
 from pyrocko import util
 from pyrocko.guts import Object, SObject, String, Timestamp, Float, Int, \
     Unicode, Tuple, List, StringChoice, Any
-from pyrocko.model import squirrel_content
+from pyrocko.model import squirrel_content, Location
 from pyrocko.response import FrequencyResponse, MultiplyResponse, \
     IntegrationResponse, DifferentiationResponse, simplify_responses, \
     FrequencyResponseCheckpoint
@@ -148,6 +148,10 @@ class CodesNSLCE(CodesNSLCEBase, Codes):
         return '.'.join(self)
 
     @property
+    def nslce(self):
+        return self[:4]
+
+    @property
     def nslc(self):
         return self[:4]
 
@@ -258,6 +262,10 @@ class CodesNSL(CodesNSLBase, Codes):
     @property
     def ns(self):
         return self[:2]
+
+    @property
+    def nsl(self):
+        return self[:3]
 
     def as_tuple(self):
         return tuple(self)
@@ -523,30 +531,21 @@ def tscale_to_kscale(tscale):
 
 
 @squirrel_content
-class Station(Object):
+class Station(Location):
     '''
     A seismic station.
     '''
 
-    network = String.T(default='', help='Deployment/network code (1-8)')
-    station = String.T(default='', help='Station code (1-5)')
-    location = String.T(default='', optional=True, help='Location code (0-2)')
+    codes = CodesNSL.T()
 
     tmin = Timestamp.T(optional=True)
     tmax = Timestamp.T(optional=True)
 
-    lat = Float.T()
-    lon = Float.T()
-    elevation = Float.T(optional=True)
-    depth = Float.T(optional=True)
-
     description = Unicode.T(optional=True)
 
-    @property
-    def codes(self):
-        return (
-            self.network, self.station,
-            self.location if self.location is not None else '*')
+    def __init__(self, **kwargs):
+        kwargs['codes'] = CodesNSL(kwargs['codes'])
+        Location.__init__(self, **kwargs)
 
     @property
     def time_span(self):
@@ -554,31 +553,24 @@ class Station(Object):
 
     def get_pyrocko_station(self):
         from pyrocko import model
-        return model.Station(
-            network=self.network,
-            station=self.station,
-            location=self.location if self.location is not None else '*',
-            lat=self.lat,
-            lon=self.lon,
-            elevation=self.elevation,
-            depth=self.depth)
+        return model.Station(*self._get_pyrocko_station_args())
 
     def _get_pyrocko_station_args(self):
         return (
-            '*',
-            self.network,
-            self.station,
-            self.location if self.location is not None else '*',
+            self.codes.network,
+            self.codes.station,
+            self.codes.location,
             self.lat,
             self.lon,
             self.elevation,
-            self.depth)
+            self.depth,
+            self.north_shift,
+            self.east_shift)
 
 
-@squirrel_content
-class Channel(Object):
+class Sensor(Location):
     '''
-    A channel of a seismic station.
+    Representation of a channel group.
     '''
 
     codes = CodesNSLCE.T()
@@ -586,67 +578,24 @@ class Channel(Object):
     tmin = Timestamp.T(optional=True)
     tmax = Timestamp.T(optional=True)
 
-    lat = Float.T()
-    lon = Float.T()
-    elevation = Float.T(optional=True)
-    depth = Float.T(optional=True)
-
-    dip = Float.T(optional=True)
-    azimuth = Float.T(optional=True)
     deltat = Float.T(optional=True)
-
-    def __init__(self, **kwargs):
-        kwargs['codes'] = CodesNSLCE(kwargs['codes'])
-        Object.__init__(self, **kwargs)
 
     @property
     def time_span(self):
         return (self.tmin, self.tmax)
 
-    def get_pyrocko_channel(self):
-        from pyrocko import model
-        return model.Channel(
-            name=self.channel,
-            azimuth=self.azimuth,
-            dip=self.dip)
-
-    def _get_pyrocko_station_args(self):
-        return (
-            self.codes.channel,
-            self.codes.network,
-            self.codes.station,
-            self.codes.location,
-            self.lat,
-            self.lon,
-            self.elevation,
-            self.depth)
-
-    def _get_pyrocko_channel_args(self):
-        return (
-            '*',
-            self.codes.channel,
-            self.azimuth,
-            self.dip)
+    def __init__(self, **kwargs):
+        kwargs['codes'] = CodesNSLCE(kwargs['codes'])
+        Location.__init__(self, **kwargs)
 
     def _get_sensor_args(self):
-        return (
-            self.codes.replace(channel=self.codes.channel[:-1] + '?'),
-            self.lat,
-            self.lon,
-            self.elevation,
-            self.depth,
-            self.deltat,
-            self.tmin,
-            self.tmax)
+        def getattr_rep(k):
+            if k == 'codes':
+                return self.codes.replace(self.codes[:-1])
+            else:
+                return getattr(self, k)
 
-
-class Sensor(Channel):
-    '''
-    Representation of a channel group.
-    '''
-
-    def grouping(self, channel):
-        return channel._get_sensor_args()
+        return [getattr_rep(k) for k in self.T.propnames]
 
     @classmethod
     def from_channels(cls, channels):
@@ -654,16 +603,45 @@ class Sensor(Channel):
         for channel in channels:
             groups[channel._get_sensor_args()].append(channel)
 
-        return [cls(
-                codes=args[0],
-                lat=args[1],
-                lon=args[2],
-                elevation=args[3],
-                depth=args[4],
-                deltat=args[5],
-                tmin=args[6],
-                tmax=args[7])
-                for args, _ in groups.items()]
+        return [
+            cls(**dict((k, v) for (k, v) in zip(cls.T.propnames, args)))
+            for args, _ in groups.items()]
+
+    def _get_pyrocko_station_args(self):
+        return (
+            self.codes.network,
+            self.codes.station,
+            self.codes.location,
+            self.lat,
+            self.lon,
+            self.elevation,
+            self.depth,
+            self.north_shift,
+            self.east_shift)
+
+
+@squirrel_content
+class Channel(Sensor):
+    '''
+    A channel of a seismic station.
+    '''
+
+    dip = Float.T(optional=True)
+    azimuth = Float.T(optional=True)
+
+    @classmethod
+    def from_channels(cls, channels):
+        raise NotImplementedError()
+
+    def get_pyrocko_channel(self):
+        from pyrocko import model
+        return model.Channel(*self._get_pyrocko_channel_args())
+
+    def _get_pyrocko_channel_args(self):
+        return (
+            self.codes.channel,
+            self.azimuth,
+            self.dip)
 
 
 observational_quantities = [
@@ -1158,9 +1136,7 @@ class Nut(Object):
     def station_kwargs(self):
         network, station, location = self.codes
         return dict(
-            network=network,
-            station=station,
-            location=location,
+            codes=self.codes,
             tmin=tmin_or_none(self.tmin),
             tmax=tmax_or_none(self.tmax))
 
