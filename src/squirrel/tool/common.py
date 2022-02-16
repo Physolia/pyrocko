@@ -282,8 +282,8 @@ class SquirrelCommand(object):
     def add_selection_arguments(self, p):
         return add_selection_arguments(p)
 
-    def add_query_arguments(self, p):
-        return add_query_arguments(p)
+    def add_query_arguments(self, p, without=[]):
+        return add_query_arguments(p, without=without)
 
     def squirrel_query_from_arguments(self, args):
         return squirrel_query_from_arguments(args)

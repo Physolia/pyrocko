@@ -951,17 +951,19 @@ class WaveformOrder(Object):
 
 
 def order_summary(orders):
-    codes = sorted(set(order.codes[1:-1] for order in orders))
-    if len(codes) >= 2:
-        return '%i orders, %s - %s' % (
+    codes_list = sorted(set(order.codes for order in orders))
+    if len(codes_list) > 3:
+        return '%i order%s: %s - %s' % (
             len(orders),
-            '.'.join(codes[0]),
-            '.'.join(codes[-1]))
+            util.plural_s(orders),
+            str(codes_list[0]),
+            str(codes_list[1]))
 
     else:
-        return '%i orders, %s' % (
+        return '%i order%s: %s' % (
             len(orders),
-            '.'.join(codes[0]))
+            util.plural_s(orders),
+            ', '.join(str(codes) for codes in codes_list))
 
 
 class Nut(Object):

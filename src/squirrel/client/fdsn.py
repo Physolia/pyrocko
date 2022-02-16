@@ -46,13 +46,6 @@ def make_task(*args):
     return progress.task(*args, logger=logger)
 
 
-def plural_s(x):
-    if not isinstance(x, int):
-        x = len(x)
-
-    return 's' if x != 1 else ''
-
-
 def diff(fn_a, fn_b):
     try:
         if os.stat(fn_a).st_size != os.stat(fn_b).st_size:
@@ -217,7 +210,7 @@ class ErrorLog(Object):
         kinds = sorted(set(entry.kind for entry in recent))
         if recent:
             return '%i error%s (%s)' % (
-                len(recent), plural_s(recent), '; '.join(kinds))
+                len(recent), util.plural_s(recent), '; '.join(kinds))
         else:
             return ''
 
@@ -668,7 +661,8 @@ class FDSNSource(Source):
 
             emessage = elog.summarize_recent()
             self._log_info_data(
-                '%i download%s successful' % (nsuccess, plural_s(nsuccess))
+                '%i download%s successful' % (
+                    nsuccess, util.plural_s(nsuccess))
                 + (', %s' % emessage if emessage else ''))
 
             if all_paths:

@@ -410,5 +410,4 @@ g_viewer_classes = {
     'log': LogStatusViewer,
     'off': DummyStatusViewer}
 
-
 progress = Progress()

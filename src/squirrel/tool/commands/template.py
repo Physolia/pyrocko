@@ -6,10 +6,14 @@
 from __future__ import absolute_import, print_function
 
 import re
+import logging
 
 from pyrocko.guts import load_string, dump
 
+from pyrocko.squirrel.error import ToolError
 from .. import common
+
+logger = logging.getLogger('psq.cli.template')
 
 path_prefix = '''
 # All file paths given below are treated relative to the location of this
@@ -49,7 +53,7 @@ sources:
 
 
 templates = {
-    'dataset-local': {
+    'local.dataset.yaml': {
         'description':
             'A typical collection of local files.',
         'yaml': '''
@@ -71,30 +75,39 @@ sources:
   format: 'detect'
 '''.format(path_prefix=path_prefix).strip()},
 
-    'dataset-geofon': {
+    'geofon.dataset.yaml': {
         'description':
             'Everything available through GEOFON.',
-        'yaml': _template_online_dataset(site='geofon')
+        'yaml': _template_online_dataset(
+            site='geofon',
+        ),
     },
 
-    'dataset-iris-seis': {
+    'iris-seis.dataset.yaml': {
         'description':
             'All high- and low-gain seismometer channels at IRIS.',
         'yaml': _template_online_dataset(
-                site='iris', channel='?H?,?L?')
+            site='iris',
+            channel='?H?,?L?',
+        ),
     },
 
-    'dataset-iris-seis-bb': {
+    'iris-seis-bb.dataset.yaml': {
         'description':
             'All broad-band high-gain seismometer channels at IRIS.',
         'yaml': _template_online_dataset(
-                site='iris', channel='VH?,LH?,BH?,HH?')
+            site='iris',
+            channel='VH?,LH?,BH?,HH?',
+        ),
     },
 
-    'dataset-bgr-gr-bfo': {
+    'bgr-gr-bfo.dataset.yaml': {
         'description': 'Station GR.BFO from BGR.',
         'yaml': _template_online_dataset(
-                site='iris', network='GR', station='BFO')
+            site='bgr',
+            network='GR',
+            station='BFO',
+        ),
     },
 }
 
@@ -133,6 +146,11 @@ def setup(parser):
         help='Set verbosity level of output YAML. Choices: %(choices)s. '
              'Default: %(default)s.')
 
+    parser.add_argument(
+        '--write', '-w',
+        action='store_true',
+        help='Write to file.')
+
 
 def decomment(s):
     out = []
@@ -159,4 +177,17 @@ def call(parser, args):
             'commented': lambda s: s,
             'normal': decomment}[args.format]
 
-        print(func(templates[args.name]['yaml']))
+        s = func(templates[args.name]['yaml'])
+
+        if args.write:
+            try:
+                with open(args.name, 'x') as f:
+                    f.write(s)
+                    f.write('\n')
+
+                logger.info('File written: %s' % args.name)
+
+            except FileExistsError:
+                raise ToolError('File exists: %s' % args.name)
+        else:
+            print(s)
