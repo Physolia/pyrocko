@@ -33,6 +33,13 @@ def abspath(path):
         return path
 
 
+def versiontuple(s):
+    fill = [0, 0, 0]
+    vals = [int(x) for x in s.split('.')]
+    fill[:len(vals)] = vals
+    return tuple(fill)
+
+
 class ExecuteGet1Error(SquirrelError):
     pass
 
@@ -298,14 +305,24 @@ class Database(object):
                         '''))):
 
                 try:
-                    self.version = execute_get1(
+                    self.version = versiontuple(execute_get1(
                         cursor,
-                        'SELECT value FROM settings WHERE key == "version"')
+                        '''
+                        SELECT value FROM settings
+                            WHERE key == "version"
+                        ''')[0])
                 except sqlite3.OperationalError:
                     raise error.SquirrelError(
                         'Squirrel database in pre-release format found: %s\n'
                         'Please remove the database file and reindex.'
                         % self._database_path)
+
+                if self.version >= (1, 1, 0):
+                    raise error.SquirrelError(
+                        'Squirrel database "%s" is of version %i.%i.%i which '
+                        'is not supported by this version of Pyrocko. Please '
+                        'upgrade the Pyrocko library.'
+                        % ((self._database_path, ) + self.version))
 
                 return
 

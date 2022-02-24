@@ -5,7 +5,6 @@
 
 from __future__ import absolute_import, print_function
 
-from .. import common
 from pyrocko import util
 from pyrocko.plot import terminal
 from pyrocko.get_terminal_size import get_terminal_size
@@ -13,8 +12,8 @@ from pyrocko.squirrel.error import ToolError
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'coverage',
+    return subparsers.add_parser(
+        'coverage',
         help='Report time spans covered.',
         description='''Report time spans covered.
 
@@ -23,18 +22,18 @@ Time spans covered by the given data selection are listed or plotted.
 
 
 def setup(parser):
-    common.add_selection_arguments(parser)
-    common.add_query_arguments(parser, without=['time'])
+    parser.add_squirrel_selection_arguments()
+    parser.add_squirrel_query_arguments(without=['time'])
 
 
 def call(parser, args):
     from pyrocko import squirrel as sq
 
-    squirrel = common.squirrel_from_selection_arguments(args)
+    squirrel = args.make_squirrel()
     tmin_g, tmax_g = squirrel.get_time_span()
     sx, _ = get_terminal_size()
 
-    kwargs = common.squirrel_query_from_arguments(args)
+    kwargs = args.squirrel_query
     kinds = kwargs.pop('kind', sq.supported_content_kinds())
     codes = kwargs.pop('codes', None)
     tmin = kwargs.pop('tmin', tmin_g)

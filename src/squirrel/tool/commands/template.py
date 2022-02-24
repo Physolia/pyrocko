@@ -11,7 +11,6 @@ import logging
 from pyrocko.guts import load_string, dump
 
 from pyrocko.squirrel.error import ToolError
-from .. import common
 
 logger = logging.getLogger('psq.cli.template')
 
@@ -53,7 +52,7 @@ sources:
 
 
 templates = {
-    'local.dataset.yaml': {
+    'local.dataset': {
         'description':
             'A typical collection of local files.',
         'yaml': '''
@@ -75,7 +74,7 @@ sources:
   format: 'detect'
 '''.format(path_prefix=path_prefix).strip()},
 
-    'geofon.dataset.yaml': {
+    'geofon.dataset': {
         'description':
             'Everything available through GEOFON.',
         'yaml': _template_online_dataset(
@@ -83,7 +82,7 @@ sources:
         ),
     },
 
-    'iris-seis.dataset.yaml': {
+    'iris-seis.dataset': {
         'description':
             'All high- and low-gain seismometer channels at IRIS.',
         'yaml': _template_online_dataset(
@@ -92,7 +91,7 @@ sources:
         ),
     },
 
-    'iris-seis-bb.dataset.yaml': {
+    'iris-seis-bb.dataset': {
         'description':
             'All broad-band high-gain seismometer channels at IRIS.',
         'yaml': _template_online_dataset(
@@ -101,12 +100,12 @@ sources:
         ),
     },
 
-    'bgr-gr-bfo.dataset.yaml': {
-        'description': 'Station GR.BFO from BGR.',
+    'bgr-gr-lh.dataset': {
+        'description': 'All LH channels for network GR from BGR.',
         'yaml': _template_online_dataset(
             site='bgr',
             network='GR',
-            station='BFO',
+            channel='LH?',
         ),
     },
 }
@@ -120,8 +119,8 @@ template_listing = '\n'.join(
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'template',
+    return subparsers.add_parser(
+        'template',
         help='Print configuration snippets.',
         description='''
 Available configuration SNIPPETs:
@@ -180,14 +179,15 @@ def call(parser, args):
         s = func(templates[args.name]['yaml'])
 
         if args.write:
+            path = args.name + '.yaml'
             try:
-                with open(args.name, 'x') as f:
+                with open(path, 'x') as f:
                     f.write(s)
                     f.write('\n')
 
-                logger.info('File written: %s' % args.name)
+                logger.info('File written: %s' % path)
 
             except FileExistsError:
-                raise ToolError('File exists: %s' % args.name)
+                raise ToolError('File exists: %s' % path)
         else:
             print(s)

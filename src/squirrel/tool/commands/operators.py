@@ -5,24 +5,22 @@
 
 from __future__ import absolute_import, print_function
 
-from .. import common
-
 
 guts_prefix = 'squirrel'
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'operators',
+    return subparsers.add_parser(
+        'operators',
         help='Print available operator mappings.')
 
 
 def setup(parser):
-    common.add_selection_arguments(parser)
+    parser.add_squirrel_selection_arguments()
 
 
 def call(parser, args):
-    squirrel = common.squirrel_from_selection_arguments(args)
+    squirrel = args.make_squirrel()
 
     def scodes(codes):
         css = list(zip(*codes))

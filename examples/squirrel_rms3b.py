@@ -17,6 +17,9 @@ class ReportRMSTool(squirrel.SquirrelCommand):
     def setup(self, parser):
         self.add_selection_arguments(parser)
 
+        # Add '--codes', '--tmin' and '--tmax', but not '--time'.
+        self.add_query_arguments(parser, without=['time'])
+
         parser.add_argument(
             '--fmin',
             dest='fmin',
@@ -30,9 +33,6 @@ class ReportRMSTool(squirrel.SquirrelCommand):
             metavar='FLOAT',
             type=float,
             help='Corner of lowpass [Hz].')
-
-        # Add '--codes', '--tmin' and '--tmax', but not '--time'.
-        self.add_query_arguments(parser, without=['time'])
 
     def call(self, parser, args):
         sq = self.squirrel_from_selection_arguments(args)
@@ -60,7 +60,7 @@ class ReportRMSTool(squirrel.SquirrelCommand):
                     tr.lowpass(4, fmax)
 
                 tr.chop(batch.tmin, batch.tmax)
-                print(tr.str_codes, tts(tr.tmin), rms(tr.ydata))
+                print(tr.str_codes, tts(batch.tmin), rms(tr.ydata))
 
 
 class PlotRMSTool(squirrel.SquirrelCommand):

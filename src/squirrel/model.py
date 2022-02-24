@@ -117,7 +117,7 @@ class CodesNSLCE(CodesNSLCEBase, Codes):
         if nargs == 1 and isinstance(args[0], CodesNSLCE):
             return args[0]
         elif nargs == 1 and isinstance(args[0], CodesNSL):
-            t = (args[0].tuple) + ('*', '*')
+            t = (args[0].nsl) + ('*', '*')
         elif nargs == 1 and isinstance(args[0], CodesX):
             t = ('*', '*', '*', '*', '*')
         elif safe_str is not None:
@@ -360,6 +360,12 @@ g_codes_classes = [
     CodesX,
     CodesNSLCE]
 
+g_codes_classes_ndot = {
+    0: CodesX,
+    2: CodesNSL,
+    3: CodesNSLCE,
+    4: CodesNSLCE}
+
 
 def to_codes_simple(kind_id, codes_safe_str):
     return g_codes_classes[kind_id](safe_str=codes_safe_str)
@@ -367,6 +373,13 @@ def to_codes_simple(kind_id, codes_safe_str):
 
 def to_codes(kind_id, obj):
     return g_codes_classes[kind_id](obj)
+
+
+def to_codes_guess(s):
+    try:
+        return g_codes_classes_ndot[s.count('.')](s)
+    except KeyError:
+        raise CodesError('Cannot guess codes type: %s' % s)
 
 
 g_content_kind_ids = (
@@ -1395,6 +1408,9 @@ class Coverage(Object):
 
 
 __all__ = [
+    'to_codes',
+    'to_codes_guess',
+    'to_codes_simple',
     'to_kind',
     'to_kinds',
     'to_kind_id',

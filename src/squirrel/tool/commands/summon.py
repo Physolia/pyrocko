@@ -8,7 +8,6 @@ from __future__ import absolute_import, print_function
 import math
 import logging
 
-from .. import common
 from pyrocko.squirrel.error import SquirrelError
 from pyrocko.progress import progress
 
@@ -16,19 +15,19 @@ logger = logging.getLogger('psq.cli.summon')
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'summon',
+    return subparsers.add_parser(
+        'summon',
         help='Fill local cache.')
 
 
 def setup(parser):
-    common.add_selection_arguments(parser)
-    common.add_query_arguments(parser)
+    parser.add_squirrel_selection_arguments()
+    parser.add_squirrel_query_arguments()
 
 
 def call(parser, args):
-    d = common.squirrel_query_from_arguments(args)
-    squirrel = common.squirrel_from_selection_arguments(args)
+    d = args.squirrel_query
+    squirrel = args.make_squirrel()
 
     if 'tmin' not in d or 'tmax' not in d:
         raise SquirrelError('Time span required.')

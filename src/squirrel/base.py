@@ -44,22 +44,17 @@ def lpick(condition, seq):
     return ft
 
 
-def codes_patterns_for_kind(kind, codes):
-    if not codes:
-        return []
+def codes_patterns_for_kind(kind_id, codes):
+    if isinstance(codes, list):
+        lcodes = []
+        for sc in codes:
+            lcodes.extend(codes_patterns_for_kind(kind_id, sc))
 
-    if not isinstance(codes[0], str):
-        out = []
-        for subcodes in codes:
-            out.extend(codes_patterns_for_kind(kind, subcodes))
-        return out
+        return lcodes
 
-    if kind in ('event', 'undefined'):
-        return [codes]
+    codes = to_codes(kind_id, codes)
 
-    codes = to_codes(to_kind_id(kind), codes)
-
-    if kind == 'station':
+    if kind_id == model.STATION:
         return [codes, codes.replace(location='[*]')]
     else:
         return [codes]
@@ -909,6 +904,8 @@ class Squirrel(Selection):
 
             return
 
+        kind_id = to_kind_id(kind)
+
         cond = []
         args = []
         if tmin is not None or tmax is not None:
@@ -920,12 +917,11 @@ class Squirrel(Selection):
 
             self._timerange_sql(tmin, tmax, kind, cond, args, naiv)
 
-        elif kind is not None:
-            cond.append('kind_codes.kind_id == ?')
-            args.append(to_kind_id(kind))
+        cond.append('kind_codes.kind_id == ?')
+        args.append(kind_id)
 
         if codes is not None:
-            pats = codes_patterns_for_kind(kind, codes)
+            pats = codes_patterns_for_kind(kind_id, codes)
             if pats:
                 cond.append(
                     ' ( %s ) ' % ' OR '.join(
@@ -1007,6 +1003,7 @@ class Squirrel(Selection):
     def _split_nuts(
             self, kind, tmin=None, tmax=None, codes=None, path=None):
 
+        kind_id = to_kind_id(kind)
         tmin_seconds, tmin_offset = model.tsplit(tmin)
         tmax_seconds, tmax_offset = model.tsplit(tmax)
 
@@ -1029,7 +1026,7 @@ class Squirrel(Selection):
                 self._timerange_sql(tmin, tmax, kind, cond, args, False)
 
                 if codes is not None:
-                    pats = codes_patterns_for_kind(kind, codes)
+                    pats = codes_patterns_for_kind(kind_id, codes)
                     if pats:
                         cond.append(
                             ' ( %s ) ' % ' OR '.join(
@@ -1381,10 +1378,11 @@ class Squirrel(Selection):
             List of matches of the form ``[kind_codes_id, codes, deltat]``.
         '''
 
-        args = [to_kind_id(kind)]
+        kind_id = to_kind_id(kind)
+        args = [kind_id]
         pats = []
         for codes in codes_list:
-            pats.extend(codes_patterns_for_kind(kind, codes))
+            pats.extend(codes_patterns_for_kind(kind_id, codes))
 
         if pats:
             codes_cond = 'AND ( %s ) ' % ' OR '.join(

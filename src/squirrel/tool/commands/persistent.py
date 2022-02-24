@@ -6,12 +6,11 @@
 from __future__ import absolute_import, print_function
 
 from pyrocko.squirrel import error, environment, database, base
-from .. import common
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'persistent',
+    return subparsers.add_parser(
+        'persistent',
         help='Manage persistent selections.',
         description='''Manage persistent selections.
 

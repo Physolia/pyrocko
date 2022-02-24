@@ -9,8 +9,6 @@ import logging
 
 from pyrocko import squirrel as sq
 
-from .. import common
-
 logger = logging.getLogger('psq.cli.database')
 
 description = '''
@@ -28,8 +26,8 @@ Actions:
 
 
 def setup_subcommand(subparsers):
-    return common.add_parser(
-        subparsers, 'database',
+    return subparsers.add_parser(
+        'database',
         help='Database inspection and maintenance.',
         description=description)
 
