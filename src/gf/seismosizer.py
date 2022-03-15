@@ -3836,6 +3836,26 @@ class PseudoDynamicRupture(SourceWithDerivedMagnitude):
         self.slip *= moment / moment_init
 
     def get_centroid(self, store, *args, **kwargs):
+        '''
+        Centroid of the pseudo dynamic rupture model.
+
+        The centroid location and time are derived from the locations and times
+        of the individual patches weighted with their moment contribution.
+        Additional ``**kwargs`` are passed to :py:meth:`pyrocko_moment_tensor`.
+
+        :param store:
+            Green's function database (needs to cover whole region of of the
+            source). Its ``deltat`` [s] is used as time increment for slip
+            difference calculation. Either ``deltat`` or ``store`` should be
+            given.
+        :type store:
+            :py:class:`~pyrocko.gf.store.Store`
+
+        :returns:
+            The centroid location and associated moment tensor.
+        :rtype:
+            :py:class:`pyrocko.model.Event`
+        '''
         _, _, _, _, time, _ = self.get_vr_time_interpolators(store)
         t_max = time.values.max()
 
