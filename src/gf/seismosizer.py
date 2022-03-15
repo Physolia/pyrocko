@@ -2771,11 +2771,18 @@ class PseudoDynamicRupture(SourceWithDerivedMagnitude):
                     axis=1)
 
     def pyrocko_moment_tensor(self, store=None, target=None):
-        # TODO: Now this should be slip, then it depends on the store.
-        # TODO: default to tractions is store is not given?
-        tractions = self.get_tractions()
-        tractions = tractions.mean(axis=0)
-        rake = num.arctan2(tractions[1], tractions[0])  # arctan2(dip, slip)
+        if store is not None:
+            if not self.patches:
+                self.discretize_patches(store)
+
+            slip = self.get_slip()
+            rakes = num.arctan2(slip[:, 1], slip[:, 0]) * r2d
+            rake = rakes.mean()
+
+        else:
+            tractions = self.get_tractions()
+            tractions = tractions.mean(axis=0)
+            rake = num.arctan2(tractions[1], tractions[0]) * r2d
 
         return pmt.MomentTensor(
             strike=self.strike,
@@ -3827,6 +3834,39 @@ class PseudoDynamicRupture(SourceWithDerivedMagnitude):
             moment = pmt.magnitude_to_moment(magnitude)
 
         self.slip *= moment / moment_init
+
+    def get_centroid(self, store, *args, **kwargs):
+        _, _, _, _, time, _ = self.get_vr_time_interpolators(store)
+        t_max = time.values.max()
+
+        moment_rate, times = self.get_moment_rate_patches(deltat=t_max)
+
+        moment = num.sum(moment_rate * times, axis=1)
+        weights = moment / moment.sum()
+
+        norths = self.get_patch_attribute('north_shift')
+        easts = self.get_patch_attribute('east_shift')
+        depths = self.get_patch_attribute('depth')
+        times = self.get_patch_attribute('time') - self.time
+
+        centroid_n = num.sum(weights * norths)
+        centroid_e = num.sum(weights * easts)
+        centroid_d = num.sum(weights * depths)
+        centroid_t = num.sum(weights * times) + self.time
+
+        centroid_lat, centroid_lon = ne_to_latlon(
+            self.lat, self.lon, centroid_n, centroid_e)
+
+        mt = self.pyrocko_moment_tensor(store, *args, **kwargs)
+
+        return model.Event(
+            lat=centroid_lat,
+            lon=centroid_lon,
+            depth=centroid_d,
+            time=centroid_t,
+            moment_tensor=mt,
+            magnitude=mt.magnitude,
+            duration=t_max)
 
 
 class DoubleDCSource(SourceWithMagnitude):
