@@ -2776,8 +2776,11 @@ class PseudoDynamicRupture(SourceWithDerivedMagnitude):
                 self.discretize_patches(store)
 
             slip = self.get_slip()
+            weights = num.linalg.norm(slip, axis=1)
+            weights /= weights.sum()
+
             rakes = num.arctan2(slip[:, 1], slip[:, 0]) * r2d
-            rake = rakes.mean()
+            rake = (rakes * weights).sum()
 
         else:
             tractions = self.get_tractions()
