@@ -2784,8 +2784,11 @@ class PseudoDynamicRupture(SourceWithDerivedMagnitude):
 
         else:
             tractions = self.get_tractions()
-            tractions = tractions.mean(axis=0)
-            rake = num.arctan2(tractions[1], tractions[0]) * r2d
+            weights = num.linalg.norm(tractions, axis=1)
+            weights /= weights.sum()
+
+            rakes = num.arctan2(tractions[:, 1], tractions[:, 0]) * r2d
+            rake = (rakes * weights).sum()
 
         return pmt.MomentTensor(
             strike=self.strike,
