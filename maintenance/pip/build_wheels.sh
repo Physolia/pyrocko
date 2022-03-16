@@ -12,7 +12,7 @@ for x in /opt/python/* ; do
     #"$x/bin/python" -c 'import sys ; sys.exit(not (sys.version_info[:2] == (3, 7)))' || continue
     "$x/bin/pip" install --upgrade pip
     "$x/bin/pip" install --only-binary=:all: --no-cache-dir -r maintenance/pip/requirements-build-pip.txt
-    "$x/bin/pip" wheel -v . -w wheels_temp
+    "$x/bin/pip" wheel -v . -w wheels_temp --only-binary=:all:
 done
 
 mkdir wheels
