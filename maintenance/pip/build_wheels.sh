@@ -2,6 +2,8 @@
 
 set -e
 
+yum install -y libjpeg-devel
+
 rm -rf wheels_temp wheels
 
 mkdir wheels_temp
