@@ -124,7 +124,7 @@ steps:
   pull: never
   commands:
   - pip3 install -f wheels --no-index --no-deps pyrocko
-  - python setup.py sdist
+  - python3 setup.py sdist
 
 - name: stage-manylinux1_x86_64
   image: pyrocko-util
