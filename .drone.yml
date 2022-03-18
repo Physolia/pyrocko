@@ -795,7 +795,8 @@ depends_on:
 - flake8
 - docs
 - tests-windows
-- pip
+- pip-manylinux1
+- pip-manylinux2010
 - pip-windows
 - conda-packages-linux
 - conda-packages-osx
