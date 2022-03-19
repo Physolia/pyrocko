@@ -92,7 +92,6 @@ steps:
   image: pyrocko-nest
   pull: never
   commands:
-  - pip3 install -f wheels --no-index --no-deps pyrocko
   - python3 setup.py sdist
 
 - name: stage
